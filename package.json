@@ -1,0 +1,22 @@
+{
+  "name": "patchworks",
+  "version": "0.0.0",
+  "description": "a tool to manage patches",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ludicroushq/patchworks.git"
+  },
+  "keywords": [
+    "patchworks"
+  ],
+  "author": "ludicrous LLC",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ludicroushq/patchworks/issues"
+  },
+  "homepage": "https://github.com/ludicroushq/patchworks#readme"
+}
