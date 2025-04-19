@@ -1,20 +1,53 @@
 {
-  "name": "patchworks",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "build": "turbo build",
+    "ci:test": "concurrently pnpm:ci:test:*",
+    "ci:test:lint": "eslint .",
+    "ci:test:pretty": "prettier --check .",
+    "ci:test:typecheck": "turbo run typecheck",
+    "dev": "turbo dev",
+    "prepare": "husky",
+    "release": "turbo run build && changeset publish",
+    "test": "concurrently pnpm:test:*",
+    "test:lint": "eslint --fix .",
+    "test:pretty": "prettier --write .",
+    "test:typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.2",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.25.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.1",
+    "neostandard": "^0.12.1",
     "prettier": "^3.5.3",
     "turbo": "^2.5.0",
     "typescript": "5.8.2"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@10.0.0",
   "engines": {
     "node": ">=18"
-  }
+  },
+  "lint-staged": {
+    "*": [
+      "eslint --fix",
+      "prettier --ignore-unknown --write"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ludicroushq/patchworks.git"
+  },
+  "keywords": [
+    "patchworks"
+  ],
+  "author": "ludicrous LLC",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ludicroushq/patchworks/issues"
+  },
+  "homepage": "https://github.com/ludicroushq/patchworks#readme"
 }

@@ -1,84 +1,103 @@
-# Turborepo starter
+# Patchworks
 
-This Turborepo starter is maintained by the Turborepo core team.
+Automatically sync your repository with updates from its template source.
 
-## Using this example
+## Problem
 
-Run the following command:
+When you clone a template repository, you lose the connection to the original template. If the template author fixes a bug or makes an improvement, there's no easy way to pull those changes into your repository.
 
-```sh
-npx create-turbo@latest
+## Solution
+
+Patchworks creates an automated system that:
+
+1. Tracks which template repository your project was based on
+2. Periodically checks for updates to the template
+3. Creates a pull request with those changes when they're available
+
+## Installation
+
+```bash
+npm install -g patchworks
 ```
 
-## What's inside?
+## Usage
 
-This Turborepo includes the following packages/apps:
+### Initialize in your repository
 
-### Apps and Packages
+```bash
+# Navigate to your repository that was based on a template
+cd my-project
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+# Initialize patchworks with the original template repository
+patchworks init https://github.com/original/template
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-pnpm build
+# By default, it tracks the 'main' branch, but you can specify another:
+patchworks init https://github.com/original/template --branch develop
 ```
 
-### Develop
+This will:
 
-To develop all apps and packages, run the following command:
+- Create a `.patchworks.json` config file
+- Set up a GitHub workflow to check for updates daily
 
-```
-cd my-turborepo
-pnpm dev
-```
+### Manually check for updates
 
-### Remote Caching
+```bash
+# Check for updates without applying them
+patchworks sync
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turbo.build/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-```
-cd my-turborepo
-npx turbo login
+# Apply updates locally
+patchworks sync --apply
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+### Automated updates via GitHub Actions
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+Once installed, Patchworks will automatically:
 
+1. Check daily for updates to the template repository
+2. Create a pull request when updates are available
+3. Update the tracking information when the PR is merged
+
+## How It Works
+
+Patchworks uses Git's diffing capabilities to:
+
+1. Keep track of the last synced commit from the template
+2. Fetch the latest changes from the template
+3. Generate a diff between the last synced commit and the current state
+4. Apply that diff to your repository
+
+## Configuration
+
+The `.patchworks.json` file in your repository tracks:
+
+```json
+{
+  "sourceRepo": "https://github.com/original/template",
+  "sourceBranch": "main",
+  "lastSyncedCommit": "abc123...",
+  "version": "0.1.0"
+}
 ```
-npx turbo link
+
+## GitHub Action
+
+Patchworks includes a GitHub Action that automatically checks for updates:
+
+```yaml
+# .github/workflows/patchworks-sync.yml
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *" # Run daily at midnight
+
+jobs:
+  patchworks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ludicroushq/patchworks-action@v0
 ```
 
-## Useful Links
+## License
 
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turbo.build/docs/core-concepts/monorepos/running-tasks)
-- [Caching](https://turbo.build/docs/core-concepts/caching)
-- [Remote Caching](https://turbo.build/docs/core-concepts/remote-caching)
-- [Filtering](https://turbo.build/docs/core-concepts/monorepos/filtering)
-- [Configuration Options](https://turbo.build/docs/reference/configuration)
-- [CLI Usage](https://turbo.build/docs/reference/command-line-reference)
+MIT
