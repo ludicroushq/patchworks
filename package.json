@@ -3,14 +3,14 @@
   "type": "module",
   "scripts": {
     "build": "turbo build",
-    "ci:test": "concurrently pnpm:ci:test:*",
+    "ci:test": "concurrently npm:ci:test:*",
     "ci:test:lint": "eslint .",
     "ci:test:pretty": "prettier --check .",
     "ci:test:typecheck": "turbo run typecheck",
     "dev": "turbo dev",
     "prepare": "husky",
     "release": "turbo run build && changeset publish",
-    "test": "concurrently pnpm:test:*",
+    "test": "concurrently npm:test:*",
     "test:lint": "eslint --fix .",
     "test:pretty": "prettier --write .",
     "test:typecheck": "turbo run typecheck"
@@ -27,7 +27,7 @@
     "turbo": "^2.5.0",
     "typescript": "5.8.2"
   },
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "npm@10.0.0",
   "engines": {
     "node": ">=18"
   },
@@ -49,5 +49,9 @@
   "bugs": {
     "url": "https://github.com/ludicroushq/patchworks/issues"
   },
-  "homepage": "https://github.com/ludicroushq/patchworks#readme"
+  "homepage": "https://github.com/ludicroushq/patchworks#readme",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
 }
