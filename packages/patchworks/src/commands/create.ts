@@ -113,7 +113,7 @@ export const createCommand = command({
         version,
         template: {
           repository: repoUrl,
-          branch: branch,
+          branch,
         },
         commit: latestCommit,
       };
