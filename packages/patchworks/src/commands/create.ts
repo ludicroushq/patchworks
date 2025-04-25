@@ -95,17 +95,12 @@ export const createCommand = command({
 
       // Configure git with Patchworks author info for this repo only
       await git.addConfig("user.name", "Patchworks", false, "local");
-      await git.addConfig(
-        "user.email",
-        "patchworks@ludicroushq.com",
-        false,
-        "local",
-      );
+      await git.addConfig("user.email", "bot@patchworks.dev", false, "local");
 
       // Add all files and create initial commit with explicit author settings
       await git.add(".");
       await git.commit("Initial commit", {
-        "--author": "Patchworks <patchworks@ludicroushq.com>",
+        "--author": "Patchworks <bot@patchworks.dev>",
       });
 
       // Create .patchworks.json file
@@ -154,7 +149,7 @@ jobs:
         path.join(workflowDir, "patchworks.yaml"),
       ]);
       await git.commit("Configure Patchworks", {
-        "--author": "Patchworks <patchworks@ludicroushq.com>",
+        "--author": "Patchworks <bot@patchworks.dev>",
       });
 
       console.log(
