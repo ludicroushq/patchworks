@@ -8,11 +8,7 @@ When you clone a template repository, you lose the connection to the original te
 
 ## Solution
 
-Patchworks creates an automated system that:
-
-1. Tracks which template repository your project was based on
-2. Periodically checks for updates to the template
-3. Creates a pull request with those changes when they're available
+Patchworks creates an automated system that tracks which template repository your project was based on and helps you stay updated with changes.
 
 ## Installation
 
@@ -22,81 +18,20 @@ npm install -g patchworks
 
 ## Usage
 
-### Initialize in your repository
+### Create a new project from a template
 
 ```bash
-# Navigate to your repository that was based on a template
-cd my-project
+# Create a new project based on a template repository
+patchworks create https://github.com/original/template my-project
 
-# Initialize patchworks with the original template repository
-patchworks init https://github.com/original/template
-
-# By default, it tracks the 'main' branch, but you can specify another:
-patchworks init https://github.com/original/template --branch develop
+# Specify a branch other than 'main'
+patchworks create https://github.com/original/template my-project --branch develop
 ```
 
 This will:
 
-- Create a `.patchworks.json` config file
-- Set up a GitHub workflow to check for updates daily
-
-### Manually check for updates
-
-```bash
-# Check for updates without applying them
-patchworks sync
-
-# Apply updates locally
-patchworks sync --apply
-```
-
-### Automated updates via GitHub Actions
-
-Once installed, Patchworks will automatically:
-
-1. Check daily for updates to the template repository
-2. Create a pull request when updates are available
-3. Update the tracking information when the PR is merged
-
-## How It Works
-
-Patchworks uses Git's diffing capabilities to:
-
-1. Keep track of the last synced commit from the template
-2. Fetch the latest changes from the template
-3. Generate a diff between the last synced commit and the current state
-4. Apply that diff to your repository
-
-## Configuration
-
-The `.patchworks.json` file in your repository tracks:
-
-```json
-{
-  "sourceRepo": "https://github.com/original/template",
-  "sourceBranch": "main",
-  "lastSyncedCommit": "abc123...",
-  "version": "0.1.0"
-}
-```
-
-## GitHub Action
-
-Patchworks includes a GitHub Action that automatically checks for updates:
-
-```yaml
-# .github/workflows/patchworks-sync.yml
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 0 * * *" # Run daily at midnight
-
-jobs:
-  patchworks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: ludicroushq/patchworks-action@v0
-```
+- Clone the template repository to your specified directory
+- Set up tracking information for future updates
 
 ## License
 

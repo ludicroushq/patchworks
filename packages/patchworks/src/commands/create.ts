@@ -123,6 +123,8 @@ export const createCommand = command({
       const workflowDir = path.join(process.cwd(), ".github", "workflows");
       await fs.mkdir(workflowDir, { recursive: true });
 
+      const majorVersion = version.split(".")[0];
+
       const workflowContent = `name: Patchworks Sync
 
 on:
@@ -134,7 +136,7 @@ jobs:
   patchworks:
     runs-on: ubuntu-latest
     steps:
-      - uses: ludicroushq/patchworks@${version}
+      - uses: ludicroushq/patchworks@v${majorVersion}
 `;
 
       await fs.writeFile(
