@@ -20,11 +20,14 @@ export const createCommand = command({
         "URL of the repository to clone (e.g. https://github.com/user/repo)",
       )
       .required(),
-    branch: string().desc("Branch to clone").default("main"),
+    destination: positional().desc("Destination folder (optional)"),
+    branch: string().desc(
+      "Branch to clone (if not specified, uses default branch)",
+    ),
   },
   handler: async (opts) => {
     try {
-      const { repoUrl, branch } = opts;
+      const { repoUrl, branch, destination } = opts;
 
       // Extract repo name from the URL
       const defaultRepoName = repoUrl.split("/").pop()?.replace(".git", "");
@@ -34,17 +37,22 @@ export const createCommand = command({
         process.exit(1);
       }
 
-      // Ask for folder destination using inquirer
-      const answers = await inquirer.prompt([
-        {
-          type: "input",
-          name: "folderName",
-          message: "Enter destination folder:",
-          default: defaultRepoName,
-        },
-      ]);
+      // Use destination if provided, otherwise use defaultRepoName
+      let folderName: string = destination || defaultRepoName;
 
-      const folderName = answers.folderName;
+      // If destination is not provided, ask for folder destination using inquirer
+      if (!destination) {
+        const answers = await inquirer.prompt([
+          {
+            type: "input",
+            name: "folderName",
+            message: "Enter destination folder:",
+            default: defaultRepoName,
+          },
+        ]);
+
+        folderName = answers.folderName;
+      }
 
       // Check if destination directory already exists
       try {
@@ -71,11 +79,54 @@ export const createCommand = command({
         // Or there was another error, which we'll catch when trying to clone
       }
 
-      console.log(chalk.blue(`Cloning ${repoUrl} into ${folderName}...`));
+      // Determine which branch to use
+      let branchToUse: string = branch || "";
+      if (!branchToUse) {
+        console.log(chalk.blue(`Detecting default branch for ${repoUrl}...`));
+        // Create a temporary directory for branch detection
+        const tempDir = tmp.dirSync();
+        try {
+          // Use ls-remote to find the default branch without cloning
+          const git = simpleGit();
+          const remote = await git.listRemote(["--symref", repoUrl, "HEAD"]);
+
+          // Parse the output to get the default branch name
+          // The output format is like:
+          // ref: refs/heads/main	HEAD
+          const match = remote.match(/ref: refs\/heads\/([^\t]+)\t+HEAD/);
+          if (match && match[1]) {
+            branchToUse = match[1];
+            console.log(chalk.blue(`Using default branch: ${branchToUse}`));
+          } else {
+            console.log(
+              chalk.yellow(
+                `Could not detect default branch, falling back to main`,
+              ),
+            );
+            branchToUse = "main";
+          }
+        } catch (error) {
+          console.log(
+            chalk.yellow(
+              `Error detecting default branch: ${error}. Falling back to main`,
+            ),
+          );
+          branchToUse = "main";
+        } finally {
+          // Clean up temp directory
+          tempDir.removeCallback();
+        }
+      }
+
+      console.log(
+        chalk.blue(
+          `Cloning ${repoUrl} into ${folderName} (branch: ${branchToUse})...`,
+        ),
+      );
 
       // Use shallow clone (--depth 1) to only get the latest commit
       // This is significantly faster and uses less resources
-      await $`git clone --depth 1 ${repoUrl} ${folderName} --branch ${branch}`;
+      await $`git clone --depth 1 ${repoUrl} ${folderName} --branch ${branchToUse}`;
 
       // Get the latest commit hash before removing git history
       const originalGit = simpleGit(folderName);
@@ -108,7 +159,7 @@ export const createCommand = command({
         version,
         template: {
           repository: repoUrl,
-          branch,
+          branch: branchToUse,
         },
         commit: latestCommit,
       };
@@ -158,7 +209,7 @@ jobs:
         chalk.green(`
 Repository initialized with Patchworks!
 - Template repo: ${repoUrl}
-- Branch: ${branch}
+- Branch: ${branchToUse}
 - Last synced commit: ${latestCommit}
 - Destination: ${folderName}
 - Patchworks version: ${version}
