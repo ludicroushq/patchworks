@@ -1,0 +1,40 @@
+---
+title: Configuration
+description: Understanding the Patchworks configuration file
+---
+
+# Configuration
+
+Patchworks uses a configuration file named `.patchworks.json` at the root of your project to track information about your template repository.
+
+## Default Configuration
+
+When you create a new project with `patchworks create`, a configuration file is automatically created with contents similar to:
+
+```json
+{
+  "version": "0.0.1",
+  "template": {
+    "repository": "https://github.com/original/template",
+    "branch": "main"
+  },
+  "commit": "abc123def456..."
+}
+```
+
+This configuration:
+
+- Tracks the Patchworks version used
+- Specifies the template repository URL and branch
+- Records the last synced commit hash
+
+## Configuration Fields
+
+| Field                 | Description                                            |
+| --------------------- | ------------------------------------------------------ |
+| `version`             | The version of Patchworks used to create the project   |
+| `template.repository` | The URL of the template repository                     |
+| `template.branch`     | The branch of the template repository to track         |
+| `commit`              | The last commit hash that was synced from the template |
+
+> **Note:** Additional configuration options for customizing the sync behavior are planned for future releases.

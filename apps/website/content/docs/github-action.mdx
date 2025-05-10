@@ -1,0 +1,54 @@
+---
+title: GitHub Action Setup
+description: Setting up the Patchworks GitHub Action
+---
+
+# GitHub Action Setup
+
+Patchworks can automatically check for updates from your template repository using GitHub Actions. When you create a new project with `patchworks create`, a GitHub Action workflow file is automatically created for you.
+
+## Default Workflow
+
+The default workflow file is created at `.github/workflows/patchworks.yaml` and looks like this:
+
+```yaml
+name: Patchworks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  patchworks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ludicroushq/patchworks@v0
+```
+
+This workflow:
+
+- Can be manually triggered with `workflow_dispatch`
+- Runs automatically at midnight every day (`cron: '0 0 * * *'`)
+- Uses the latest version of the Patchworks GitHub Action
+
+## Customizing the Schedule
+
+You can customize the workflow file to change when it runs. For example, to run weekly instead of daily:
+
+```yaml
+name: Patchworks Weekly Check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0" # Run at midnight every Sunday
+
+jobs:
+  patchworks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ludicroushq/patchworks@v0
+```
+
+> **Note:** The GitHub Action is currently under development. Check back for updates on additional features and options.

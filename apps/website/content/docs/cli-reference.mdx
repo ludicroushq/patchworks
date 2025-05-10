@@ -1,0 +1,49 @@
+---
+title: CLI Reference
+description: Complete reference for the Patchworks CLI commands
+---
+
+# CLI Reference
+
+Patchworks provides a command-line interface (CLI) for managing template repositories.
+
+## Global Options
+
+These options are available for all commands:
+
+- `--help`: Display help for a command
+- `--version`: Display the version of Patchworks
+
+## Commands
+
+### create
+
+Create a new project from a template repository.
+
+```bash
+patchworks create <repoUrl> [destination] [options]
+```
+
+**Arguments:**
+
+- `repoUrl`: URL of the repository to clone (e.g. https://github.com/user/repo)
+- `destination`: (Optional) Destination folder name
+
+**Options:**
+
+- `--branch <branch>`: Branch to clone (if not specified, uses default branch)
+
+**Example:**
+
+```bash
+patchworks create https://github.com/original/template my-project --branch develop
+```
+
+This command:
+
+- Clones the template repository to the specified directory
+- Removes the original git history and initializes a new git repository
+- Creates a `.patchworks.json` configuration file to track the template source
+- Sets up a GitHub Action workflow to check for updates
+
+> **Note:** Additional commands for managing template updates are planned for future releases.

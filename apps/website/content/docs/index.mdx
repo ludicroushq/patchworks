@@ -1,13 +1,39 @@
 ---
-title: Hello World
-description: Your first document
+title: Getting Started
+description: Learn how to use Patchworks to keep your templates in sync
 ---
 
-Welcome to the docs! You can start writing documents in `/content/docs`.
+# Patchworks
 
-## What is Next?
+Patchworks is a tool that helps you keep your repositories in sync with their template sources. When you clone a template repository, you lose the connection to the original template. If the template author fixes a bug or makes an improvement, there's no easy way to pull those changes into your repository.
+
+## Installation
+
+```bash
+npm install -g patchworks
+```
+
+## Basic Usage
+
+### Create a new project from a template
+
+```bash
+# Create a new project based on a template repository
+patchworks create https://github.com/original/template my-project
+
+# Specify a branch other than 'main'
+patchworks create https://github.com/original/template my-project --branch develop
+```
+
+This will:
+
+- Clone the template repository to your specified directory
+- Set up tracking information for future updates
+- Create a GitHub Action workflow to check for updates
+
+## Next Steps
 
 <Cards>
-  <Card title="Learn more about Next.js" href="https://nextjs.org/docs" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.vercel.app" />
+  <Card title="GitHub Action Setup" href="/docs/github-action" />
+  <Card title="Configuration" href="/docs/configuration" />
 </Cards>
