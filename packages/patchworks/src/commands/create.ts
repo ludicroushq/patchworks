@@ -42,16 +42,22 @@ export const createCommand = command({
 
       // If destination is not provided, ask for folder destination using inquirer
       if (!destination) {
-        const answers = await inquirer.prompt([
-          {
-            type: "input",
-            name: "folderName",
-            message: "Enter destination folder:",
-            default: defaultRepoName,
-          },
-        ]);
+        try {
+          const answers = await inquirer.prompt([
+            {
+              type: "input",
+              name: "folderName",
+              message: "Enter destination folder:",
+              default: defaultRepoName,
+            },
+          ]);
 
-        folderName = answers.folderName;
+          folderName = answers.folderName;
+        } catch (error) {
+          // Handle Ctrl+C gracefully
+          console.log(chalk.yellow("\nOperation cancelled by user"));
+          process.exit(0);
+        }
       }
 
       // Check if destination directory already exists
