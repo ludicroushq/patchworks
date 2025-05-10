@@ -13,7 +13,8 @@
     "test": "concurrently npm:test:*",
     "test:lint": "eslint --fix .",
     "test:pretty": "prettier --write .",
-    "test:typecheck": "turbo run typecheck"
+    "test:typecheck": "turbo run typecheck",
+    "version": "changeset version && npm i"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.2",
