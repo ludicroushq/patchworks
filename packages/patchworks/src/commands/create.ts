@@ -152,10 +152,16 @@ export const createCommand = command({
 
       // Add all files and create initial commit with explicit author and committer settings
       await git.add(".");
-      await git.commit("Initial commit", {
-        "--author": "Patchworks <bot@patchworks.dev>",
-        "--committer": "Patchworks <bot@patchworks.dev>",
-      });
+
+      const commitEnv = {
+        ...process.env,
+        GIT_AUTHOR_NAME: "Patchworks",
+        GIT_AUTHOR_EMAIL: "bot@patchworks.dev",
+        GIT_COMMITTER_NAME: "Patchworks",
+        GIT_COMMITTER_EMAIL: "bot@patchworks.dev",
+      };
+
+      await git.env(commitEnv).commit("Initial commit");
 
       // Create .patchworks.json file
       const patchworksConfig = {
@@ -204,10 +210,8 @@ jobs:
         ".patchworks.json",
         path.join(workflowDir, "patchworks.yaml"),
       ]);
-      await git.commit("Configure Patchworks", {
-        "--author": "Patchworks <bot@patchworks.dev>",
-        "--committer": "Patchworks <bot@patchworks.dev>",
-      });
+
+      await git.env(commitEnv).commit("Configure Patchworks");
 
       console.log(
         chalk.green(`
