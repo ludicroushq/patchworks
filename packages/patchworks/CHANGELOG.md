@@ -1,5 +1,11 @@
 # patchworks
 
+## 0.0.3
+
+### Patch Changes
+
+- 07d52b1: fix commit bug
+
 ## 0.0.2
 
 ### Patch Changes
