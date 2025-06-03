@@ -150,14 +150,11 @@ export const createCommand = command({
       // Initialize a new git repository
       await git.init();
 
-      // Configure git with Patchworks author info for this repo only
-      await git.addConfig("user.name", "Patchworks", false, "local");
-      await git.addConfig("user.email", "bot@patchworks.dev", false, "local");
-
-      // Add all files and create initial commit with explicit author settings
+      // Add all files and create initial commit with explicit author and committer settings
       await git.add(".");
       await git.commit("Initial commit", {
         "--author": "Patchworks <bot@patchworks.dev>",
+        "--committer": "Patchworks <bot@patchworks.dev>",
       });
 
       // Create .patchworks.json file
@@ -187,7 +184,7 @@ export const createCommand = command({
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: "0 0 * * *"
 
 jobs:
   patchworks:
@@ -209,6 +206,7 @@ jobs:
       ]);
       await git.commit("Configure Patchworks", {
         "--author": "Patchworks <bot@patchworks.dev>",
+        "--committer": "Patchworks <bot@patchworks.dev>",
       });
 
       console.log(
