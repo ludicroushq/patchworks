@@ -175,7 +175,7 @@ export const createCommand = command({
 
       await fs.writeFile(
         ".patchworks.json",
-        JSON.stringify(patchworksConfig, null, 2),
+        JSON.stringify(patchworksConfig, null, 2) + "\n",
         "utf-8",
       );
 
