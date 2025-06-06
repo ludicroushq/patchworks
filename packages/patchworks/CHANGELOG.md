@@ -1,5 +1,11 @@
 # patchworks
 
+## 0.0.4
+
+### Patch Changes
+
+- 2b1a1be: add newline
+
 ## 0.0.3
 
 ### Patch Changes
