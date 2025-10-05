@@ -1,6 +1,6 @@
 import { command, string } from "@drizzle-team/brocli";
 import chalk from "chalk";
-import { runPatchworksUpdate } from "../action/index.js";
+import { runPatchworksUpdate } from "../update/index.js";
 
 const parseBooleanFlag = (value: string | undefined, fallback: boolean) => {
   if (value === undefined || value === "") {

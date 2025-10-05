@@ -201,8 +201,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: ludicroushq/patchworks@v${majorVersion}
-        with:
-          patchworks-package: patchworks@${version}
         env:
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
 `;
