@@ -44,7 +44,6 @@ runs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
-        cache: npm
     - name: Run Patchworks update
       shell: bash
       run: |
