@@ -1,23 +1,42 @@
 {
-  "private": true,
+  "name": "patchworks",
+  "version": "0.0.3",
+  "description": "a tool to manage patches",
   "type": "module",
+  "bin": {
+    "patchworks": "./dist/index.js"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "turbo build",
-    "ci:test": "concurrently npm:ci:test:*",
+    "build": "tsup",
+    "ci:test": "pnpm run ci:test:lint && pnpm run ci:test:pretty && pnpm run ci:test:typecheck",
     "ci:test:lint": "eslint .",
     "ci:test:pretty": "prettier --check .",
-    "ci:test:typecheck": "turbo run typecheck",
-    "dev": "turbo dev",
+    "ci:test:typecheck": "tsc --noEmit",
+    "dev": "tsup --watch",
     "prepare": "husky",
-    "release": "turbo run build && changeset publish",
-    "test": "concurrently npm:test:*",
+    "release": "pnpm run build && changeset publish",
+    "test": "pnpm run test:lint && pnpm run test:pretty && pnpm run test:typecheck",
     "test:lint": "eslint --fix .",
     "test:pretty": "prettier --write .",
-    "test:typecheck": "turbo run typecheck",
-    "version": "changeset version && npm i"
+    "test:typecheck": "tsc --noEmit",
+    "version": "changeset version && pnpm install"
+  },
+  "dependencies": {
+    "@drizzle-team/brocli": "^0.11.0",
+    "chalk": "^5.4.1",
+    "inquirer": "^12.5.2",
+    "simple-git": "^3.27.0",
+    "tmp": "^0.2.3",
+    "zx": "^8.5.3"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.2",
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^22.14.1",
+    "@types/tmp": "^0.2.6",
     "concurrently": "^9.1.2",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
@@ -25,10 +44,13 @@
     "lint-staged": "^15.5.1",
     "neostandard": "^0.12.1",
     "prettier": "^3.5.3",
-    "turbo": "^2.5.0",
+    "tsup": "^8.4.0",
     "typescript": "5.8.2"
   },
-  "packageManager": "npm@10.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "packageManager": "pnpm@10.16.1",
   "engines": {
     "node": ">=18"
   },
@@ -50,9 +72,5 @@
   "bugs": {
     "url": "https://github.com/ludicroushq/patchworks/issues"
   },
-  "homepage": "https://github.com/ludicroushq/patchworks#readme",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+  "homepage": "https://github.com/ludicroushq/patchworks#readme"
 }
