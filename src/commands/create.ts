@@ -192,11 +192,21 @@ on:
   schedule:
     - cron: "0 0 * * *"
 
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   patchworks:
     runs-on: ubuntu-latest
     steps:
-      - uses: ludicroushq/patchworks@v${majorVersion}
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Patchworks update
+        uses: ludicroushq/patchworks@v${majorVersion}
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
 `;
 
       await fs.writeFile(

@@ -1,9 +1,12 @@
 import neostandard, { resolveIgnoresFromGitignore } from "neostandard";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
 
+const gitignorePatterns = resolveIgnoresFromGitignore();
+gitignorePatterns.push("dist/**/*");
+
 export default [
   ...neostandard({
-    ignores: resolveIgnoresFromGitignore(),
+    ignores: gitignorePatterns,
     ts: true,
     noStyle: true,
   }),

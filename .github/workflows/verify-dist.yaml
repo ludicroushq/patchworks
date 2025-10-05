@@ -1,0 +1,42 @@
+name: Verify Action Bundle
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build project
+        run: pnpm run build
+      - name: Ensure dist/action bundle unchanged
+        run: |
+          if ! git diff --quiet -- dist/action/index.cjs dist/action/index.cjs.map; then
+            echo "dist/action bundle is out of date. Run pnpm run build and commit the results." >&2
+            git status --short dist/action
+            exit 1
+          fi
+          if git status --short dist/action | grep '^??'; then
+            echo "Unexpected untracked files found under dist/action after build." >&2
+            git status --short dist/action
+            exit 1
+          fi
+          echo "dist/action bundle is up to date."

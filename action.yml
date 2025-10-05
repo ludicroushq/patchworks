@@ -3,11 +3,8 @@ description: "sync your repository with updates from its template source"
 author: "ludicrous"
 
 runs:
-  using: "composite"
-  steps:
-    - name: TODO
-      shell: bash
-      run: echo "TODO"
+  using: "node20"
+  main: "dist/action/index.cjs"
 
 branding:
   icon: "copy"

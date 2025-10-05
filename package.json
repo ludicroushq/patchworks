@@ -11,17 +11,19 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "ci:test": "pnpm run ci:test:lint && pnpm run ci:test:pretty && pnpm run ci:test:typecheck",
+    "ci:test": "pnpm run ci:test:lint && pnpm run ci:test:pretty && pnpm run ci:test:typecheck && pnpm run ci:test:unit",
     "ci:test:lint": "eslint .",
     "ci:test:pretty": "prettier --check .",
     "ci:test:typecheck": "tsc --noEmit",
+    "ci:test:unit": "pnpm run test:unit",
     "dev": "tsup --watch",
     "prepare": "husky",
     "release": "pnpm run build && changeset publish",
-    "test": "pnpm run test:lint && pnpm run test:pretty && pnpm run test:typecheck",
+    "test": "pnpm run test:lint && pnpm run test:pretty && pnpm run test:typecheck && pnpm run test:unit",
     "test:lint": "eslint --fix .",
     "test:pretty": "prettier --write .",
     "test:typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
     "version": "changeset version && pnpm install"
   },
   "dependencies": {
@@ -45,7 +47,8 @@
     "neostandard": "^0.12.1",
     "prettier": "^3.5.3",
     "tsup": "^8.4.0",
-    "typescript": "5.8.2"
+    "typescript": "5.8.2",
+    "vitest": "^2.1.9"
   },
   "publishConfig": {
     "access": "public"
