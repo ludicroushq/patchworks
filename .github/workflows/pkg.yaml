@@ -20,4 +20,4 @@ jobs:
 
       - run: pnpm run build
 
-      - run: npx pkg-pr-new publish './packages/*'
+      - run: npx pkg-pr-new publish
