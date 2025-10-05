@@ -10,13 +10,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: "npm"
+          cache: pnpm
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
-      - run: npm run build
+      - run: pnpm run build
 
       - run: npx pkg-pr-new publish './packages/*'
