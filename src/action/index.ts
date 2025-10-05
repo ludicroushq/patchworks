@@ -421,13 +421,46 @@ const defaultDependencies: PatchworksDependencies = {
   checkExistingPullRequest,
 };
 
+export type PatchworksResult = {
+  hasChanges: boolean;
+  branchName: string;
+  baseBranch: string;
+  commitMessage: string;
+  prTitle: string;
+  prBody: string;
+  rejectFiles: string[];
+  currentCommit: string;
+  nextCommit: string;
+};
+
+export type PatchworksRunOptions = Partial<PatchworksDependencies> & {
+  commit?: boolean;
+  push?: boolean;
+  createPr?: boolean;
+  outputFile?: string;
+};
+
 export async function runPatchworksUpdate(
-  overrides: Partial<PatchworksDependencies> = {},
-) {
+  options: PatchworksRunOptions = {},
+): Promise<PatchworksResult> {
+  const {
+    commit: commitOption,
+    push: pushOption,
+    createPr: createPrOption,
+    outputFile,
+    ...dependencyOverrides
+  } = options;
+
   const { gitRunner, createPullRequest, checkExistingPullRequest } = {
     ...defaultDependencies,
-    ...overrides,
+    ...dependencyOverrides,
   };
+
+  const commitChanges = commitOption ?? true;
+  const pushChanges = pushOption ?? true;
+  const createPrRequested = createPrOption ?? true;
+  const shouldPush = commitChanges && pushChanges;
+  const shouldCreatePr = commitChanges && pushChanges && createPrRequested;
 
   console.log(`Running Patchworks update from ${workspace}`);
 
@@ -452,7 +485,7 @@ export async function runPatchworksUpdate(
   }
 
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  if (!token) {
+  if (shouldCreatePr && !token) {
     throw new Error(
       "GITHUB_TOKEN (or GH_TOKEN) is required to create pull requests",
     );
@@ -461,19 +494,42 @@ export async function runPatchworksUpdate(
   const updateBranch =
     process.env.PATCHWORKS_BRANCH_NAME ?? "patchworks/update";
 
-  const hasExistingPR = await checkExistingPullRequest(
-    token,
-    owner,
-    repo,
-    updateBranch,
-  );
+  const result: PatchworksResult = {
+    hasChanges: false,
+    branchName: updateBranch,
+    baseBranch,
+    commitMessage: "",
+    prTitle: "",
+    prBody: "",
+    rejectFiles: [],
+    currentCommit: currentTemplateCommit,
+    nextCommit: currentTemplateCommit,
+  };
 
-  if (hasExistingPR) {
-    return;
+  if (shouldCreatePr && token) {
+    const hasExistingPR = await checkExistingPullRequest(
+      token,
+      owner,
+      repo,
+      updateBranch,
+    );
+
+    if (hasExistingPR) {
+      if (outputFile) {
+        await fs.writeFile(
+          outputFile,
+          `${JSON.stringify(result, null, 2)}\n`,
+          "utf8",
+        );
+      }
+      return result;
+    }
   }
 
   await ensureCleanWorkingTree(gitRunner);
-  await ensureGitIdentity(gitRunner);
+  if (commitChanges) {
+    await ensureGitIdentity(gitRunner);
+  }
 
   await gitRunner(["fetch", "origin", baseBranch]);
   await gitRunner(["checkout", baseBranch]);
@@ -494,7 +550,14 @@ export async function runPatchworksUpdate(
 
   if (templateCommits.length === 0) {
     console.log("No commits found on template branch. Nothing to do.");
-    return;
+    if (outputFile) {
+      await fs.writeFile(
+        outputFile,
+        `${JSON.stringify(result, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    return result;
   }
 
   const indexOfCurrent = templateCommits.indexOf(currentTemplateCommit);
@@ -507,7 +570,14 @@ export async function runPatchworksUpdate(
 
   if (indexOfCurrent === 0) {
     console.log("Repository already matches the latest template commit.");
-    return;
+    if (outputFile) {
+      await fs.writeFile(
+        outputFile,
+        `${JSON.stringify(result, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    return result;
   }
 
   const nextTemplateCommit = templateCommits[indexOfCurrent - 1];
@@ -559,27 +629,44 @@ export async function runPatchworksUpdate(
     "utf8",
   );
 
-  await gitRunner(["add", "-A"]);
-
-  const staged = await gitRunner(["diff", "--name-only", "--cached"]);
-  if (staged.stdout.trim().length === 0) {
-    console.log(
-      "No changes to commit after applying template update. Exiting.",
-    );
-    return;
-  }
-
-  const stagedFiles = staged.stdout
+  const statusResult = await gitRunner(["status", "--porcelain"]);
+  const statusLines = statusResult.stdout
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  const rejectFiles = stagedFiles.filter((file) => file.endsWith(".rej"));
+  if (statusLines.length === 0) {
+    console.log(
+      "No changes to commit after applying template update. Exiting.",
+    );
+    if (outputFile) {
+      await fs.writeFile(
+        outputFile,
+        `${JSON.stringify(result, null, 2)}\n`,
+        "utf8",
+      );
+    }
+    return result;
+  }
+
+  const changedFiles = statusLines
+    .map((line) => {
+      if (line.length > 3 && line[0] === "R") {
+        const arrowIndex = line.indexOf("->");
+        const candidate =
+          arrowIndex >= 0 ? line.slice(arrowIndex + 3) : line.slice(3);
+        return candidate.trim();
+      }
+      if (line.length > 3) {
+        return line.slice(3).trim();
+      }
+      return line.trim();
+    })
+    .filter((file) => file.length > 0);
+
+  const rejectFiles = changedFiles.filter((file) => file.endsWith(".rej"));
 
   const commitMessage = `Patchworks: sync ${shortCurrent} -> ${shortNext}`;
-  await gitRunner(["commit", "-m", commitMessage]);
-
-  await gitRunner(["push", "--force-with-lease", "origin", updateBranch]);
 
   const commitSubject = await getCommitSubject(gitRunner, nextTemplateCommit);
   const commitUrl = toCommitUrl(templateRepo, nextTemplateCommit);
@@ -601,17 +688,48 @@ export async function runPatchworksUpdate(
     rejectFiles,
   });
 
-  await createPullRequest(
-    token,
-    owner,
-    repo,
-    prTitle,
-    updateBranch,
-    baseBranch,
-    prBody,
-  );
+  if (commitChanges) {
+    await gitRunner(["add", "-A"]);
+    await gitRunner(["commit", "-m", commitMessage]);
 
-  console.log("Patchworks update completed successfully.");
+    if (shouldPush) {
+      await gitRunner(["push", "--force-with-lease", "origin", updateBranch]);
+    }
+  } else {
+    console.log(
+      "Patchworks update prepared. Review changes and commit at your convenience.",
+    );
+  }
+
+  if (shouldCreatePr && token) {
+    await createPullRequest(
+      token,
+      owner,
+      repo,
+      prTitle,
+      updateBranch,
+      baseBranch,
+      prBody,
+    );
+    console.log("Patchworks update completed successfully.");
+  }
+
+  result.hasChanges = true;
+  result.commitMessage = commitMessage;
+  result.prTitle = prTitle;
+  result.prBody = prBody;
+  result.rejectFiles = rejectFiles;
+  result.nextCommit = nextTemplateCommit;
+
+  if (outputFile) {
+    await fs.writeFile(
+      outputFile,
+      `${JSON.stringify(result, null, 2)}\n`,
+      "utf8",
+    );
+  }
+
+  return result;
 }
 
 const isTestEnvironment =

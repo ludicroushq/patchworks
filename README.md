@@ -18,6 +18,27 @@ Patchworks creates an automated system that tracks which template repository you
 - Skips runs when a Patchworks update PR already exists and opens a fresh PR with a summary and reject list otherwise.
 - Lists any `.rej` files in the PR body so you can review conflicts directly from the diff.
 
+The action now wraps a composite workflow around the CLI and the [`peter-evans/create-pull-request`](https://github.com/peter-evans/create-pull-request) action:
+
+```yaml
+jobs:
+  patchworks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ludicroushq/patchworks@v0
+        with:
+          patchworks-package: patchworks@latest # or https://pkg.pr.new/org/patchworks@commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Inputs let you override the Node version, branch name, base branch, git identity, or even point to a canary tarball published by pkg.pr.new. Any values passed through `with:` are forwarded to the underlying `patchworks update` CLI, which prepares the diff; the composite then commits and opens the PR via `create-pull-request`.
+
+### CLI Usage
+
+- `patchworks update` runs the same sync logic against the current repository. Use options like `--token`, `--repository`, `--branch-name`, or `--base-branch` to override environment values when invoking locally or from custom automation. By default it leaves changes in your working tree so you can inspect them before committing; add `--commit true --push true --pr true` to mimic the GitHub Action end-to-end.
+- `GITHUB_TOKEN` (or `--token`) must have permission to push branches and create pull requests.
+
 The generated workflow grants `contents: write` and `pull-requests: write`, checks out the repository with `fetch-depth: 0`, and exposes `GITHUB_TOKEN` to the action. Advanced users can override behaviour with environment variables such as `PATCHWORKS_BASE_BRANCH`, `PATCHWORKS_BRANCH_NAME`, `PATCHWORKS_GIT_NAME`, and `PATCHWORKS_GIT_EMAIL`.
 
 ## Documentation

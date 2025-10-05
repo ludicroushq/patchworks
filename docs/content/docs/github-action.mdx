@@ -24,6 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: ludicroushq/patchworks@v0
+        with:
+          patchworks-package: patchworks@0.0.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 This workflow:
@@ -49,6 +53,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: ludicroushq/patchworks@v0
+        with:
+          patchworks-package: patchworks@0.0.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 > **Note:** The GitHub Action is currently under development. Check back for updates on additional features and options.
+
+## Advanced Inputs
+
+The action is a thin wrapper around the `patchworks update` CLI. You can customise the behaviour with inputs:
+
+- `patchworks-package`: Package spec passed to `npx`. Pin to a release (e.g. `patchworks@0.0.3`) or test a canary tarball (`https://pkg.pr.new/ludicroushq/patchworks@<commit>`).
+- `patchworks-args`: Extra flags forwarded to `patchworks update` (for example `--branch-name patchworks/canary`).
+- `branch-name`, `base-branch`, `git-name`, `git-email`: Override naming and git identity defaults.
+- `node-version`: Set the Node runtime (defaults to `lts/*`).
+
+```yaml
+steps:
+  - uses: ludicroushq/patchworks@v0
+    with:
+      patchworks-package: https://pkg.pr.new/ludicroushq/patchworks@<commit>
+      patchworks-args: "--branch-name patchworks/canary"
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+For local automation you can run the same command directly: `npx patchworks update --token <PAT> --repository owner/repo`.
+
+Behind the scenes the composite action commits the prepared diff and opens a pull request with [`peter-evans/create-pull-request`](https://github.com/peter-evans/create-pull-request). If the update branch already has an open PR, the action updates that PR instead of creating duplicates.

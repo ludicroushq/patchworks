@@ -47,3 +47,25 @@ This command:
 - Sets up a GitHub Action workflow to check for updates
 
 > **Note:** Additional commands for managing template updates are planned for future releases.
+
+### update
+
+Sync the current repository with the latest changes from its template.
+
+```bash
+patchworks update [options]
+```
+
+**Options:**
+
+- `--token <token>`: GitHub token to authenticate pushes and PR creation (defaults to `GITHUB_TOKEN`).
+- `--repository <owner/repo>`: Override the repository slug detected from the environment.
+- `--base-branch <branch>`: Branch to use as the base when generating updates.
+- `--branch-name <branch>`: Branch name for the Patchworks update commit.
+- `--git-name <name>` / `--git-email <email>`: Override commit author information.
+- `--commit <true|false>`: Commit the generated changes (default `false`).
+- `--push <true|false>`: Push the update branch after committing (default matches `--commit`).
+- `--pr <true|false>`: Open a pull request after pushing (default matches `--commit` & `--push`).
+- `--output-file <path>`: Write run metadata (branch, commit message, PR body) to a JSON file.
+
+Run this inside your project directory (or from CI) to apply a single template commit and update `.patchworks.json`. By default it leaves the changes in your working tree; add `--commit true --push true --pr true` to mirror the behaviour of the GitHub Action.

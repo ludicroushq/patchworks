@@ -200,11 +200,9 @@ jobs:
   patchworks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: ludicroushq/patchworks@v${majorVersion}
         with:
-          fetch-depth: 0
-      - name: Run Patchworks update
-        uses: ludicroushq/patchworks@v${majorVersion}
+          patchworks-package: patchworks@${version}
         env:
           GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
 `;
