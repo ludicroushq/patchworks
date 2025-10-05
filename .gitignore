@@ -65,11 +65,3 @@ yarn-error.log*
 .env*.local
 .vercel
 next-env.d.ts
-
-# Keep the compiled GitHub Action bundle in VCS
-!dist/
-dist/*
-!dist/action/
-dist/action/*
-!dist/action/index.cjs
-!dist/action/index.cjs.map
