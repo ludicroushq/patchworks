@@ -156,15 +156,6 @@ export function getRefName(): string {
   return "main";
 }
 
-async function ensureCleanWorkingTree(gitRunner: GitRunner) {
-  const status = await gitRunner(["status", "--porcelain"]);
-  if (status.stdout.trim().length > 0) {
-    throw new Error(
-      "Working tree is not clean before running Patchworks update. Please ensure the repository has no pending changes.",
-    );
-  }
-}
-
 async function readConfig(configPath: string): Promise<PatchworksConfig> {
   if (!existsSync(configPath)) {
     throw new Error(
@@ -389,6 +380,11 @@ export async function runPatchworksUpdate(
   const templateRepo = config.template.repository;
   const currentTemplateCommit = config.commit;
 
+  const shortCurrent = currentTemplateCommit.substring(0, 7);
+  log(
+    `Template repository: ${templateRepo} (branch "${templateBranch}") — current commit ${shortCurrent}`,
+  );
+
   const baseBranch = getRefName();
   log(`Using base branch ${baseBranch}`);
 
@@ -417,7 +413,19 @@ export async function runPatchworksUpdate(
     nextCommit: currentTemplateCommit,
   };
 
-  await ensureCleanWorkingTree(gitRunner);
+  const preflightStatus = await gitRunner(["status", "--short"], {
+    allowFailure: true,
+  });
+  if (preflightStatus.stdout.trim().length > 0) {
+    log(
+      "Working tree is dirty. The following files differ:",
+      "\n",
+      preflightStatus.stdout.trim(),
+    );
+    throw new Error(
+      "Working tree is not clean before running Patchworks update. Please ensure the repository has no pending changes.",
+    );
+  }
 
   await gitRunner(["fetch", "origin", baseBranch]);
   await gitRunner(["checkout", baseBranch]);
@@ -462,9 +470,9 @@ export async function runPatchworksUpdate(
     );
   }
   const shortNext = nextTemplateCommit.substring(0, 7);
-  const shortCurrent = currentTemplateCommit.substring(0, 7);
 
-  log(`Preparing update for template commit ${shortCurrent} -> ${shortNext}`);
+  log(`Next template commit detected: ${shortCurrent} -> ${shortNext}`);
+  log("Generating template diff...");
 
   const diffResult = await gitRunner([
     "diff",
@@ -553,6 +561,8 @@ export async function runPatchworksUpdate(
   result.prBody = prBody;
   result.rejectFiles = rejectFiles;
   result.nextCommit = nextTemplateCommit;
+
+  log("Patchworks update prepared successfully.");
 
   return result;
 }
