@@ -50,7 +50,6 @@ runs:
         body: ${{ steps.patchworks.outputs.pr_body }}
         author: Patchworks <bot@patchworks.dev>
         committer: Patchworks <bot@patchworks.dev>
-        branch-suffix: 'none'
 
 branding:
   icon: "copy"
