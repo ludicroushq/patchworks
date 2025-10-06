@@ -37,7 +37,7 @@ runs:
           echo "has_changes=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        node -e "const fs=require('fs');const data=JSON.parse(fs.readFileSync('patchworks-output.json','utf8'));const outputs={has_changes:data.hasChanges?'true':'false',commit_message:data.commitMessage||'',pr_title:data.prTitle||'',pr_body:data.prBody||''};const out=process.env.GITHUB_OUTPUT;for(const [key,value] of Object.entries(outputs)){const sanitized=String(value).replace(/%/g,'%25').replace(/\\r/g,'%0D').replace(/\\n/g,'%0A');fs.appendFileSync(out,`${key}=${sanitized}\\n`);}" 
+        npx --yes tsx "$GITHUB_ACTION_PATH/scripts/write-github-output.ts" patchworks-output.json
     - name: Create or update Patchworks pull request
       if: steps.patchworks.outputs.has_changes == 'true'
       uses: peter-evans/create-pull-request@v7
