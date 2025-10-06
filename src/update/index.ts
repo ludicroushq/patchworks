@@ -243,28 +243,26 @@ export function buildPullRequestBody(input: BuildPullRequestBodyInput): string {
     rejectFiles,
   } = input;
 
-  const lines: string[] = [];
-  lines.push("## Summary");
-  lines.push(`- Template: ${templateRepo} (branch "${templateBranch}")`);
-  lines.push(`- Previous commit: ${currentCommit}`);
-  lines.push(`- New commit: ${nextCommit}`);
-  lines.push(`- Template message: ${commitSubject || "(no subject)"}`);
-  if (compareUrl) {
-    lines.push(`- Diff: ${compareUrl}`);
-  } else if (commitUrl) {
-    lines.push(`- Commit: ${commitUrl}`);
-  }
+  const diffLink = compareUrl
+    ? `- Diff: ${compareUrl}`
+    : commitUrl
+      ? `- Commit: ${commitUrl}`
+      : "";
 
-  lines.push("\n## Rejects");
-  if (rejectFiles.length === 0) {
-    lines.push("- None");
-  } else {
-    for (const file of rejectFiles) {
-      lines.push(`- \`${file}\``);
-    }
-  }
+  const rejectsList =
+    rejectFiles.length === 0
+      ? "- None"
+      : rejectFiles.map((file) => `- \`${file}\``).join("\n");
 
-  return lines.join("\n");
+  return `## Summary
+- Template: ${templateRepo} (branch "${templateBranch}")
+- Previous commit: ${currentCommit}
+- New commit: ${nextCommit}
+- Template message: ${commitSubject || "(no subject)"}
+${diffLink}
+
+## Rejects
+${rejectsList}`;
 }
 
 type PatchworksDependencies = {

@@ -21,13 +21,19 @@ try {
   };
 
   for (const [key, value] of Object.entries(outputs)) {
-    // Sanitize values for GitHub Actions output
-    const sanitized = String(value)
-      .replace(/%/g, "%25")
-      .replace(/\r/g, "%0D")
-      .replace(/\n/g, "%0A");
+    const stringValue = String(value);
 
-    appendFileSync(githubOutput, `${key}=${sanitized}\n`);
+    // Use heredoc format for multiline strings, simple format for single-line
+    if (stringValue.includes("\n")) {
+      appendFileSync(githubOutput, `${key}<<EOF\n${stringValue}\nEOF\n`);
+    } else {
+      // For single-line values, escape special characters
+      const sanitized = stringValue
+        .replace(/%/g, "%25")
+        .replace(/\r/g, "%0D")
+        .replace(/\n/g, "%0A");
+      appendFileSync(githubOutput, `${key}=${sanitized}\n`);
+    }
   }
 
   console.log("Successfully wrote metadata to GITHUB_OUTPUT");
