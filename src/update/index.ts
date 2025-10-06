@@ -1,8 +1,8 @@
-import { spawn } from "node:child_process";
 import { existsSync, promises as fs } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
+import simpleGit from "simple-git";
 
 export type CommandResult = {
   stdout: string;
@@ -40,65 +40,37 @@ export function setWorkspaceForTesting(newWorkspace: string) {
   process.chdir(workspace);
 }
 
-export async function runCommand(
-  command: string,
+async function runGit(
   args: string[],
   options: RunOptions = {},
 ): Promise<CommandResult> {
-  const spawned = spawn(command, args, {
-    cwd: workspace,
-    env: process.env,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const git = simpleGit(workspace);
 
-  const stdoutChunks: string[] = [];
-  const stderrChunks: string[] = [];
+  try {
+    const result = await git.raw(args);
+    return {
+      stdout: result,
+      stderr: "",
+      code: 0,
+    };
+  } catch (error) {
+    const gitError = error as Error & {
+      exitCode?: number;
+      message?: string;
+    };
+    const code = gitError.exitCode ?? 1;
+    const stderr = gitError.message ?? String(error);
 
-  spawned.stdout?.setEncoding("utf8");
-  spawned.stderr?.setEncoding("utf8");
+    if (!options.allowFailure) {
+      throw new Error(`Command failed: git ${args.join(" ")}\n${stderr}`);
+    }
 
-  spawned.stdout?.on("data", (data: string) => {
-    stdoutChunks.push(data);
-  });
-
-  spawned.stderr?.on("data", (data: string) => {
-    stderrChunks.push(data);
-  });
-
-  if (options.input) {
-    spawned.stdin?.write(options.input);
+    return {
+      stdout: "",
+      stderr,
+      code,
+    };
   }
-
-  spawned.stdin?.end();
-
-  return new Promise<CommandResult>((resolve, reject) => {
-    spawned.on("error", (error) => {
-      reject(error);
-    });
-
-    spawned.on("close", (code) => {
-      const result: CommandResult = {
-        stdout: stdoutChunks.join(""),
-        stderr: stderrChunks.join(""),
-        code: code ?? 0,
-      };
-
-      if (result.code !== 0 && !options.allowFailure) {
-        const error = new Error(
-          `Command failed: ${command} ${args.join(" ")}\n${result.stderr}`,
-        );
-        (error as Error & { result?: CommandResult }).result = result;
-        reject(error);
-        return;
-      }
-
-      resolve(result);
-    });
-  });
-}
-
-async function runGit(args: string[], options: RunOptions = {}) {
-  return runCommand("git", args, options);
 }
 
 export function parseGithubSlug(repositoryUrl: string): string | null {
@@ -211,8 +183,9 @@ export async function applyPatchSafely(
   gitRunner: GitRunner,
   log: (...args: unknown[]) => void = console.log,
 ) {
-  const strategies: string[][] = [
+  const result = await gitRunner(
     [
+      "apply",
       "--reject",
       "--whitespace=fix",
       "--ignore-space-change",
@@ -220,43 +193,19 @@ export async function applyPatchSafely(
       "--inaccurate-eof",
       patchFile,
     ],
-    [
-      "--reject",
-      "--whitespace=fix",
-      "--ignore-space-change",
-      "--inaccurate-eof",
-      patchFile,
-    ],
-    [
-      "--reject",
-      "--whitespace=fix",
-      "--ignore-whitespace",
-      "--inaccurate-eof",
-      patchFile,
-    ],
-    [
-      "--reject",
-      "--whitespace=nowarn",
-      "--ignore-space-change",
-      "--ignore-whitespace",
-      "--inaccurate-eof",
-      patchFile,
-    ],
-  ];
+    { allowFailure: true },
+  );
 
-  for (const args of strategies) {
-    const result = await gitRunner(["apply", ...args], { allowFailure: true });
-    if (result.code === 0) {
-      return;
-    }
+  if (result.code === 0) {
+    return;
+  }
 
-    const status = await gitRunner(["status", "--porcelain"]);
-    if (status.stdout.trim().length > 0) {
-      log(
-        "Patch applied with warnings. Some hunks may have been rejected (see .rej files if present).",
-      );
-      return;
-    }
+  const status = await gitRunner(["status", "--porcelain"]);
+  if (status.stdout.trim().length > 0) {
+    log(
+      "Patch applied with warnings. Some hunks may have been rejected (see .rej files if present).",
+    );
+    return;
   }
 
   throw new Error(

@@ -37,29 +37,16 @@ describe("applyPatchSafely", () => {
     expect(gitRunner).toHaveBeenCalledTimes(2);
   });
 
-  it("throws after exhausting all strategies", async () => {
-    const responses: CommandResult[] = [
-      result(1),
-      result(0, ""),
-      result(1),
-      result(0, ""),
-      result(1),
-      result(0, ""),
-      result(1),
-      result(0, ""),
-    ];
-    const gitRunner: GitRunner = vi.fn(() => {
-      const next = responses.shift();
-      if (!next) {
-        throw new Error("Unexpected call");
-      }
-      return Promise.resolve(next);
-    });
+  it("throws when patch fails with no changes", async () => {
+    const gitRunner: GitRunner = vi
+      .fn()
+      .mockResolvedValueOnce(result(1))
+      .mockResolvedValueOnce(result(0, ""));
 
     await expect(applyPatchSafely("patch.diff", gitRunner)).rejects.toThrow(
       "Failed to apply template diff",
     );
 
-    expect(gitRunner).toHaveBeenCalledTimes(8);
+    expect(gitRunner).toHaveBeenCalledTimes(2);
   });
 });
