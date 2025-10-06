@@ -336,6 +336,29 @@ const defaultDependencies: PatchworksDependencies = {
   gitRunner: runGit,
 };
 
+async function resolveBaseBranch(
+  gitRunner: GitRunner,
+  log: (...args: unknown[]) => void,
+): Promise<string> {
+  if (process.env.PATCHWORKS_BASE_BRANCH) {
+    return process.env.PATCHWORKS_BASE_BRANCH;
+  }
+  if (process.env.GITHUB_REF_NAME) {
+    return process.env.GITHUB_REF_NAME;
+  }
+  const current = await gitRunner(["rev-parse", "--abbrev-ref", "HEAD"], {
+    allowFailure: true,
+  });
+  if (current.code === 0) {
+    const value = current.stdout.trim();
+    if (value.length > 0 && value !== "HEAD") {
+      return value;
+    }
+  }
+  log("Unable to determine current branch. Defaulting to main.");
+  return "main";
+}
+
 export type PatchworksResult = {
   hasChanges: boolean;
   branchName: string;
@@ -379,59 +402,42 @@ export async function runPatchworksUpdate(
   const templateBranch = config.template.branch ?? "main";
   const templateRepo = config.template.repository;
   const currentTemplateCommit = config.commit;
-
   const shortCurrent = currentTemplateCommit.substring(0, 7);
-  log(
-    `Template repository: ${templateRepo} (branch "${templateBranch}") — current commit ${shortCurrent}`,
-  );
 
-  const baseBranch = getRefName();
-  log(`Using base branch ${baseBranch}`);
+  log(`Template repository: ${templateRepo} (branch "${templateBranch}")`);
+  log(`Current template commit: ${shortCurrent}`);
 
-  const githubRepo = process.env.GITHUB_REPOSITORY;
-  if (!githubRepo) {
-    throw new Error("GITHUB_REPOSITORY is not set in the environment");
-  }
-
-  const [owner, repo] = githubRepo.split("/");
-  if (!owner || !repo) {
-    throw new Error(`Unable to parse owner/repo from ${githubRepo}`);
-  }
+  const baseBranch = await resolveBaseBranch(gitRunner, log);
+  log(`Using base branch: ${baseBranch}`);
 
   const updateBranch =
     process.env.PATCHWORKS_BRANCH_NAME ?? "patchworks/update";
+  log(`Using update branch: ${updateBranch}`);
 
-  const result: PatchworksResult = {
-    hasChanges: false,
-    branchName: updateBranch,
-    baseBranch,
-    commitMessage: "",
-    prTitle: "",
-    prBody: "",
-    rejectFiles: [],
-    currentCommit: currentTemplateCommit,
-    nextCommit: currentTemplateCommit,
-  };
-
-  const preflightStatus = await gitRunner(["status", "--short"], {
+  const dirtyStatus = await gitRunner(["status", "--short"], {
     allowFailure: true,
   });
-  if (preflightStatus.stdout.trim().length > 0) {
-    log(
-      "Working tree is dirty. The following files differ:",
-      "\n",
-      preflightStatus.stdout.trim(),
-    );
+  if (dirtyStatus.stdout.trim().length > 0) {
+    log(`Working tree has pending changes:
+${dirtyStatus.stdout.trim()}`);
     throw new Error(
       "Working tree is not clean before running Patchworks update. Please ensure the repository has no pending changes.",
     );
   }
 
+  log("Fetching base branch...");
   await gitRunner(["fetch", "origin", baseBranch]);
+
+  log("Checking out base branch...");
   await gitRunner(["checkout", baseBranch]);
+
+  log("Updating base branch...");
   await gitRunner(["pull", "--ff-only", "origin", baseBranch]);
+
+  log(`Checking out update branch ${updateBranch}...`);
   await gitRunner(["checkout", "-B", updateBranch, baseBranch]);
 
+  log("Fetching template history...");
   await fetchTemplate(
     gitRunner,
     "patchworks-template",
@@ -447,7 +453,17 @@ export async function runPatchworksUpdate(
 
   if (templateCommits.length === 0) {
     log("No commits found on template branch. Nothing to do.");
-    return result;
+    return {
+      hasChanges: false,
+      branchName: updateBranch,
+      baseBranch,
+      commitMessage: "",
+      prTitle: "",
+      prBody: "",
+      rejectFiles: [],
+      currentCommit: currentTemplateCommit,
+      nextCommit: currentTemplateCommit,
+    };
   }
 
   const indexOfCurrent = templateCommits.indexOf(currentTemplateCommit);
@@ -460,7 +476,17 @@ export async function runPatchworksUpdate(
 
   if (indexOfCurrent === 0) {
     log("Repository already matches the latest template commit.");
-    return result;
+    return {
+      hasChanges: false,
+      branchName: updateBranch,
+      baseBranch,
+      commitMessage: "",
+      prTitle: "",
+      prBody: "",
+      rejectFiles: [],
+      currentCommit: currentTemplateCommit,
+      nextCommit: currentTemplateCommit,
+    };
   }
 
   const nextTemplateCommit = templateCommits[indexOfCurrent - 1];
@@ -513,7 +539,17 @@ export async function runPatchworksUpdate(
 
   if (statusLines.length === 0) {
     log("No changes to commit after applying template update. Exiting.");
-    return result;
+    return {
+      hasChanges: false,
+      branchName: updateBranch,
+      baseBranch,
+      commitMessage: "",
+      prTitle: "",
+      prBody: "",
+      rejectFiles: [],
+      currentCommit: currentTemplateCommit,
+      nextCommit: currentTemplateCommit,
+    };
   }
 
   const changedFiles = statusLines
@@ -555,16 +591,19 @@ export async function runPatchworksUpdate(
     rejectFiles,
   });
 
-  result.hasChanges = true;
-  result.commitMessage = commitMessage;
-  result.prTitle = prTitle;
-  result.prBody = prBody;
-  result.rejectFiles = rejectFiles;
-  result.nextCommit = nextTemplateCommit;
-
   log("Patchworks update prepared successfully.");
 
-  return result;
+  return {
+    hasChanges: true,
+    branchName: updateBranch,
+    baseBranch,
+    commitMessage,
+    prTitle,
+    prBody,
+    rejectFiles,
+    currentCommit: currentTemplateCommit,
+    nextCommit: nextTemplateCommit,
+  };
 }
 
 const isTestEnvironment =
