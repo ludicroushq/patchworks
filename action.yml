@@ -27,7 +27,7 @@ runs:
         if [ -z "$PACKAGE_SPEC" ]; then
           PACKAGE_SPEC="patchworks@latest"
         fi
-        npx --yes -p "$PACKAGE_SPEC" patchworks update --json true > patchworks-output.json
+        npx --yes -p "$PACKAGE_SPEC" patchworks update --report patchworks-output.json
     - name: Collect Patchworks metadata
       id: patchworks
       shell: bash

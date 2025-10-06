@@ -58,7 +58,7 @@ describe("patchworks error handling", () => {
 
   describe("config validation", () => {
     it("throws when .patchworks.json is missing", async () => {
-      await expect(runPatchworksUpdate({ silent: true })).rejects.toThrow(
+      await expect(runPatchworksUpdate()).rejects.toThrow(
         ".patchworks.json not found",
       );
     });
@@ -70,7 +70,7 @@ describe("patchworks error handling", () => {
         "utf8",
       );
 
-      await expect(runPatchworksUpdate({ silent: true })).rejects.toThrow(
+      await expect(runPatchworksUpdate()).rejects.toThrow(
         "Unable to parse .patchworks.json",
       );
     });
@@ -87,7 +87,7 @@ describe("patchworks error handling", () => {
         "utf8",
       );
 
-      await expect(runPatchworksUpdate({ silent: true })).rejects.toThrow(
+      await expect(runPatchworksUpdate()).rejects.toThrow(
         "Missing commit in patchworks config",
       );
     });
@@ -104,7 +104,7 @@ describe("patchworks error handling", () => {
         "utf8",
       );
 
-      await expect(runPatchworksUpdate({ silent: true })).rejects.toThrow(
+      await expect(runPatchworksUpdate()).rejects.toThrow(
         "Missing template.repository in patchworks config",
       );
     });
@@ -122,7 +122,7 @@ describe("patchworks error handling", () => {
         "utf8",
       );
 
-      await expect(runPatchworksUpdate({ silent: true })).rejects.toThrow(
+      await expect(runPatchworksUpdate()).rejects.toThrow(
         "Missing commit in patchworks config",
       );
     });
@@ -155,9 +155,10 @@ describe("patchworks error handling", () => {
       // Create a dirty file
       await writeFile(path.join(tempDir, "dirty.txt"), "uncommitted", "utf8");
 
-      await expect(runPatchworksUpdate({ silent: true })).rejects.toThrow(
-        "Working tree is not clean",
-      );
+      const error = await runPatchworksUpdate().catch((e: Error) => e);
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain("Working tree is not clean");
+      expect((error as Error).message).toContain("dirty.txt");
     });
   });
 
@@ -196,7 +197,7 @@ describe("patchworks error handling", () => {
 
       setWorkspaceForTesting(projectDir);
 
-      await expect(runPatchworksUpdate({ silent: true })).rejects.toThrow(
+      await expect(runPatchworksUpdate()).rejects.toThrow(
         "not found on branch",
       );
     });
@@ -237,7 +238,7 @@ describe("patchworks error handling", () => {
 
       setWorkspaceForTesting(projectDir);
 
-      const result = await runPatchworksUpdate({ silent: true });
+      const result = await runPatchworksUpdate();
 
       expect(result.hasChanges).toBe(false);
       expect(result.currentCommit).toBe(latestCommit);

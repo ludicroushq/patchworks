@@ -1,33 +1,24 @@
 import { command, string } from "@drizzle-team/brocli";
 import chalk from "chalk";
+import { promises as fs } from "fs";
 import { runPatchworksUpdate } from "../update/index.js";
-
-const parseBooleanFlag = (value: string | undefined): boolean => {
-  if (value === undefined) {
-    return false;
-  }
-  if (value === "") {
-    return true;
-  }
-  const normalized = value.toLowerCase();
-  return ["1", "true", "yes", "y", "on"].includes(normalized);
-};
 
 export const updateCommand = command({
   name: "update",
   desc: "Apply the next template commit to the current repository",
   options: {
-    json: string().desc("Emit run metadata as JSON (suppresses normal logs)"),
+    report: string().desc("Write JSON report to the specified file path"),
   },
   handler: async (opts) => {
     try {
-      const wantsJson = parseBooleanFlag(opts.json);
+      const result = await runPatchworksUpdate();
 
-      const result = await runPatchworksUpdate({ silent: wantsJson });
-
-      if (wantsJson) {
-        process.stdout.write(`${JSON.stringify(result)}\n`);
-        return;
+      if (opts.report) {
+        await fs.writeFile(
+          opts.report,
+          JSON.stringify(result, null, 2),
+          "utf8",
+        );
       }
 
       if (!result.hasChanges) {

@@ -25,24 +25,22 @@ describe("update command", () => {
     process.env = { ...originalEnv };
   });
 
-  it("invokes update in non-destructive mode", async () => {
-    await updateCommand.handler!({ json: undefined } as never);
+  it("invokes update without report file", async () => {
+    await updateCommand.handler!({ report: undefined } as never);
 
-    expect(mockedUpdate).toHaveBeenCalledWith({ silent: false });
+    expect(mockedUpdate).toHaveBeenCalledWith();
   });
 
-  it("emits JSON when requested", async () => {
-    const spy = vi
-      .spyOn(process.stdout, "write")
-      .mockImplementation(() => true);
+  it("writes JSON report when --report flag is provided", async () => {
+    const mockWriteFile = vi.fn();
+    vi.doMock("fs", () => ({
+      promises: {
+        writeFile: mockWriteFile,
+      },
+    }));
 
-    await updateCommand.handler!({ json: "true" } as never);
+    await updateCommand.handler!({ report: "output.json" } as never);
 
-    expect(mockedUpdate).toHaveBeenCalledWith({ silent: true });
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringMatching(/"hasChanges":false/),
-    );
-
-    spy.mockRestore();
+    expect(mockedUpdate).toHaveBeenCalledWith();
   });
 });

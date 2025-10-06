@@ -57,16 +57,24 @@ async function runGit(
     const gitError = error as Error & {
       exitCode?: number;
       message?: string;
+      stdout?: string;
+      stderr?: string;
+      git?: { exitCode: number; stdOut: string[]; stdErr: string[] };
     };
-    const code = gitError.exitCode ?? 1;
-    const stderr = gitError.message ?? String(error);
+    const code = gitError.exitCode ?? gitError.git?.exitCode ?? 1;
+    const stdout = gitError.stdout ?? gitError.git?.stdOut?.join("\n") ?? "";
+    const stderr =
+      gitError.stderr ??
+      gitError.git?.stdErr?.join("\n") ??
+      gitError.message ??
+      String(error);
 
     if (!options.allowFailure) {
       throw new Error(`Command failed: git ${args.join(" ")}\n${stderr}`);
     }
 
     return {
-      stdout: "",
+      stdout,
       stderr,
       code,
     };
@@ -181,7 +189,6 @@ async function getCommitSubject(
 export async function applyPatchSafely(
   patchFile: string,
   gitRunner: GitRunner,
-  log: (...args: unknown[]) => void = console.log,
 ) {
   const result = await gitRunner(
     [
@@ -202,7 +209,7 @@ export async function applyPatchSafely(
 
   const status = await gitRunner(["status", "--porcelain"]);
   if (status.stdout.trim().length > 0) {
-    log(
+    console.log(
       "Patch applied with warnings. Some hunks may have been rejected (see .rej files if present).",
     );
     return;
@@ -282,26 +289,17 @@ export type PatchworksRunOptions = Partial<PatchworksDependencies> & {
   commit?: boolean;
   push?: boolean;
   createPr?: boolean;
-  silent?: boolean;
 };
 
 export async function runPatchworksUpdate(
   options: PatchworksRunOptions = {},
 ): Promise<PatchworksResult> {
-  const { silent = false, ...dependencyOverrides } = options;
-
   const { gitRunner } = {
     ...defaultDependencies,
-    ...dependencyOverrides,
+    ...options,
   };
 
-  const log = (...args: unknown[]) => {
-    if (!silent) {
-      console.log(...args);
-    }
-  };
-
-  log(`Running Patchworks update from ${workspace}`);
+  console.log(`Running Patchworks update from ${workspace}`);
 
   const configPath = path.join(workspace, ".patchworks.json");
   const config = await readConfig(configPath);
@@ -311,21 +309,23 @@ export async function runPatchworksUpdate(
   const currentTemplateCommit = config.commit;
   const shortCurrent = currentTemplateCommit.substring(0, 7);
 
-  log(`Template repository: ${templateRepo} (branch "${templateBranch}")`);
-  log(`Current template commit: ${shortCurrent}`);
+  console.log(
+    `Template repository: ${templateRepo} (branch "${templateBranch}")`,
+  );
+  console.log(`Current template commit: ${shortCurrent}`);
 
-  const dirtyStatus = await gitRunner(["status", "--short"], {
+  const dirtyStatus = await gitRunner(["status", "--porcelain"], {
     allowFailure: true,
   });
   if (dirtyStatus.stdout.trim().length > 0) {
-    log(`Working tree has pending changes:
-${dirtyStatus.stdout.trim()}`);
+    const dirtyFiles = dirtyStatus.stdout.trim();
+    console.log(`Working tree has pending changes:\n${dirtyFiles}`);
     throw new Error(
-      "Working tree is not clean before running Patchworks update. Please ensure the repository has no pending changes.",
+      `Working tree is not clean before running Patchworks update. Please ensure the repository has no pending changes.\n\nDirty files:\n${dirtyFiles}`,
     );
   }
 
-  log("Fetching template history...");
+  console.log("Fetching template history...");
   await fetchTemplate(
     gitRunner,
     "patchworks-template",
@@ -340,7 +340,7 @@ ${dirtyStatus.stdout.trim()}`);
   );
 
   if (templateCommits.length === 0) {
-    log("No commits found on template branch. Nothing to do.");
+    console.log("No commits found on template branch. Nothing to do.");
     return {
       hasChanges: false,
       commitMessage: "",
@@ -361,7 +361,7 @@ ${dirtyStatus.stdout.trim()}`);
   }
 
   if (indexOfCurrent === 0) {
-    log("Repository already matches the latest template commit.");
+    console.log("Repository already matches the latest template commit.");
     return {
       hasChanges: false,
       commitMessage: "",
@@ -381,8 +381,8 @@ ${dirtyStatus.stdout.trim()}`);
   }
   const shortNext = nextTemplateCommit.substring(0, 7);
 
-  log(`Next template commit detected: ${shortCurrent} -> ${shortNext}`);
-  log("Generating template diff...");
+  console.log(`Next template commit detected: ${shortCurrent} -> ${shortNext}`);
+  console.log("Generating template diff...");
 
   const diffResult = await gitRunner([
     "diff",
@@ -398,11 +398,13 @@ ${dirtyStatus.stdout.trim()}`);
     const tempDir = await fs.mkdtemp(path.join(tmpdir(), "patchworks-"));
     const patchFile = path.join(tempDir, `${nextTemplateCommit}.patch`);
     await fs.writeFile(patchFile, diffContent, "utf8");
-    await applyPatchSafely(patchFile, gitRunner, log);
+    await applyPatchSafely(patchFile, gitRunner);
     await fs.rm(patchFile, { force: true });
     await fs.rm(tempDir, { recursive: true, force: true });
   } else {
-    log("Template diff is empty. Repository already matches template changes.");
+    console.log(
+      "Template diff is empty. Repository already matches template changes.",
+    );
   }
 
   const updatedConfig: PatchworksConfig = {
@@ -422,7 +424,9 @@ ${dirtyStatus.stdout.trim()}`);
     .filter((line) => line.length > 0);
 
   if (statusLines.length === 0) {
-    log("No changes to commit after applying template update. Exiting.");
+    console.log(
+      "No changes to commit after applying template update. Exiting.",
+    );
     return {
       hasChanges: false,
       commitMessage: "",
@@ -473,7 +477,7 @@ ${dirtyStatus.stdout.trim()}`);
     rejectFiles,
   });
 
-  log("Patchworks update prepared successfully.");
+  console.log("Patchworks update prepared successfully.");
 
   return {
     hasChanges: true,
