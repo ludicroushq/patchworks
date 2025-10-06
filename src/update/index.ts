@@ -165,13 +165,6 @@ async function ensureCleanWorkingTree(gitRunner: GitRunner) {
   }
 }
 
-async function ensureGitIdentity(gitRunner: GitRunner) {
-  const name = process.env.PATCHWORKS_GIT_NAME ?? "Patchworks";
-  const email = process.env.PATCHWORKS_GIT_EMAIL ?? "bot@patchworks.dev";
-  await gitRunner(["config", "user.name", name]);
-  await gitRunner(["config", "user.email", email]);
-}
-
 async function readConfig(configPath: string): Promise<PatchworksConfig> {
   if (!existsSync(configPath)) {
     throw new Error(
@@ -242,12 +235,39 @@ async function getCommitSubject(
 export async function applyPatchSafely(
   patchFile: string,
   gitRunner: GitRunner,
+  log: (...args: unknown[]) => void = console.log,
 ) {
   const strategies: string[][] = [
-    ["--reject", "--whitespace=nowarn", patchFile],
-    ["--reject", "--whitespace=fix", patchFile],
-    ["--reject", "--ignore-space-change", "--whitespace=nowarn", patchFile],
-    ["--reject", "--ignore-whitespace", "--whitespace=nowarn", patchFile],
+    [
+      "--reject",
+      "--whitespace=fix",
+      "--ignore-space-change",
+      "--ignore-whitespace",
+      "--inaccurate-eof",
+      patchFile,
+    ],
+    [
+      "--reject",
+      "--whitespace=fix",
+      "--ignore-space-change",
+      "--inaccurate-eof",
+      patchFile,
+    ],
+    [
+      "--reject",
+      "--whitespace=fix",
+      "--ignore-whitespace",
+      "--inaccurate-eof",
+      patchFile,
+    ],
+    [
+      "--reject",
+      "--whitespace=nowarn",
+      "--ignore-space-change",
+      "--ignore-whitespace",
+      "--inaccurate-eof",
+      patchFile,
+    ],
   ];
 
   for (const args of strategies) {
@@ -258,7 +278,7 @@ export async function applyPatchSafely(
 
     const status = await gitRunner(["status", "--porcelain"]);
     if (status.stdout.trim().length > 0) {
-      console.log(
+      log(
         "Patch applied with warnings. Some hunks may have been rejected (see .rej files if present).",
       );
       return;
@@ -268,98 +288,6 @@ export async function applyPatchSafely(
   throw new Error(
     "Failed to apply template diff. Manual intervention required.",
   );
-}
-
-export type CreatePullRequest = (
-  token: string,
-  owner: string,
-  repo: string,
-  title: string,
-  head: string,
-  base: string,
-  body: string,
-) => Promise<void>;
-
-async function createPullRequest(
-  token: string,
-  owner: string,
-  repo: string,
-  title: string,
-  head: string,
-  base: string,
-  body: string,
-) {
-  const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/pulls`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "User-Agent": "patchworks-action",
-      },
-      body: JSON.stringify({
-        title,
-        head,
-        base,
-        body,
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to create pull request (${response.status}): ${errorText}`,
-    );
-  }
-
-  const pr = (await response.json()) as { number: number; html_url: string };
-  console.log(`Created PR #${pr.number}: ${pr.html_url}`);
-}
-
-export type CheckExistingPullRequest = (
-  token: string,
-  owner: string,
-  repo: string,
-  head: string,
-) => Promise<boolean>;
-
-async function checkExistingPullRequest(
-  token: string,
-  owner: string,
-  repo: string,
-  head: string,
-): Promise<boolean> {
-  const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/pulls?state=open&head=${owner}:${head}`,
-    {
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "User-Agent": "patchworks-action",
-      },
-    },
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to check for existing pull requests (${response.status}): ${errorText}`,
-    );
-  }
-
-  const prs = (await response.json()) as Array<{ number: number }>;
-  const existing = prs[0];
-  if (existing) {
-    console.log(
-      `Found existing Patchworks update PR (#${existing.number}). Exiting without changes.`,
-    );
-    return true;
-  }
-
-  return false;
 }
 
 export type BuildPullRequestBodyInput = {
@@ -411,14 +339,10 @@ export function buildPullRequestBody(input: BuildPullRequestBodyInput): string {
 
 type PatchworksDependencies = {
   gitRunner: GitRunner;
-  createPullRequest: CreatePullRequest;
-  checkExistingPullRequest: CheckExistingPullRequest;
 };
 
 const defaultDependencies: PatchworksDependencies = {
   gitRunner: runGit,
-  createPullRequest,
-  checkExistingPullRequest,
 };
 
 export type PatchworksResult = {
@@ -437,32 +361,26 @@ export type PatchworksRunOptions = Partial<PatchworksDependencies> & {
   commit?: boolean;
   push?: boolean;
   createPr?: boolean;
-  outputFile?: string;
+  silent?: boolean;
 };
 
 export async function runPatchworksUpdate(
   options: PatchworksRunOptions = {},
 ): Promise<PatchworksResult> {
-  const {
-    commit: commitOption,
-    push: pushOption,
-    createPr: createPrOption,
-    outputFile,
-    ...dependencyOverrides
-  } = options;
+  const { silent = false, ...dependencyOverrides } = options;
 
-  const { gitRunner, createPullRequest, checkExistingPullRequest } = {
+  const { gitRunner } = {
     ...defaultDependencies,
     ...dependencyOverrides,
   };
 
-  const commitChanges = commitOption ?? true;
-  const pushChanges = pushOption ?? true;
-  const createPrRequested = createPrOption ?? true;
-  const shouldPush = commitChanges && pushChanges;
-  const shouldCreatePr = commitChanges && pushChanges && createPrRequested;
+  const log = (...args: unknown[]) => {
+    if (!silent) {
+      console.log(...args);
+    }
+  };
 
-  console.log(`Running Patchworks update from ${workspace}`);
+  log(`Running Patchworks update from ${workspace}`);
 
   const configPath = path.join(workspace, ".patchworks.json");
   const config = await readConfig(configPath);
@@ -472,7 +390,7 @@ export async function runPatchworksUpdate(
   const currentTemplateCommit = config.commit;
 
   const baseBranch = getRefName();
-  console.log(`Using base branch ${baseBranch}`);
+  log(`Using base branch ${baseBranch}`);
 
   const githubRepo = process.env.GITHUB_REPOSITORY;
   if (!githubRepo) {
@@ -482,13 +400,6 @@ export async function runPatchworksUpdate(
   const [owner, repo] = githubRepo.split("/");
   if (!owner || !repo) {
     throw new Error(`Unable to parse owner/repo from ${githubRepo}`);
-  }
-
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  if (shouldCreatePr && !token) {
-    throw new Error(
-      "GITHUB_TOKEN (or GH_TOKEN) is required to create pull requests",
-    );
   }
 
   const updateBranch =
@@ -506,34 +417,12 @@ export async function runPatchworksUpdate(
     nextCommit: currentTemplateCommit,
   };
 
-  if (shouldCreatePr && token) {
-    const hasExistingPR = await checkExistingPullRequest(
-      token,
-      owner,
-      repo,
-      updateBranch,
-    );
-
-    if (hasExistingPR) {
-      if (outputFile) {
-        await fs.writeFile(
-          outputFile,
-          `${JSON.stringify(result, null, 2)}\n`,
-          "utf8",
-        );
-      }
-      return result;
-    }
-  }
-
   await ensureCleanWorkingTree(gitRunner);
-  if (commitChanges) {
-    await ensureGitIdentity(gitRunner);
-  }
 
   await gitRunner(["fetch", "origin", baseBranch]);
   await gitRunner(["checkout", baseBranch]);
   await gitRunner(["pull", "--ff-only", "origin", baseBranch]);
+  await gitRunner(["checkout", "-B", updateBranch, baseBranch]);
 
   await fetchTemplate(
     gitRunner,
@@ -549,14 +438,7 @@ export async function runPatchworksUpdate(
   );
 
   if (templateCommits.length === 0) {
-    console.log("No commits found on template branch. Nothing to do.");
-    if (outputFile) {
-      await fs.writeFile(
-        outputFile,
-        `${JSON.stringify(result, null, 2)}\n`,
-        "utf8",
-      );
-    }
+    log("No commits found on template branch. Nothing to do.");
     return result;
   }
 
@@ -569,14 +451,7 @@ export async function runPatchworksUpdate(
   }
 
   if (indexOfCurrent === 0) {
-    console.log("Repository already matches the latest template commit.");
-    if (outputFile) {
-      await fs.writeFile(
-        outputFile,
-        `${JSON.stringify(result, null, 2)}\n`,
-        "utf8",
-      );
-    }
+    log("Repository already matches the latest template commit.");
     return result;
   }
 
@@ -589,11 +464,7 @@ export async function runPatchworksUpdate(
   const shortNext = nextTemplateCommit.substring(0, 7);
   const shortCurrent = currentTemplateCommit.substring(0, 7);
 
-  console.log(
-    `Preparing update for template commit ${shortCurrent} -> ${shortNext}`,
-  );
-
-  await gitRunner(["checkout", "-B", updateBranch, baseBranch]);
+  log(`Preparing update for template commit ${shortCurrent} -> ${shortNext}`);
 
   const diffResult = await gitRunner([
     "diff",
@@ -605,20 +476,17 @@ export async function runPatchworksUpdate(
 
   const diffContent = diffResult.stdout;
 
-  if (diffContent.trim().length === 0) {
-    console.log(
-      "Template diff is empty. Repository already matches template changes.",
-    );
-  } else {
+  if (diffContent.trim().length !== 0) {
     const tempDir = await fs.mkdtemp(path.join(tmpdir(), "patchworks-"));
     const patchFile = path.join(tempDir, `${nextTemplateCommit}.patch`);
     await fs.writeFile(patchFile, diffContent, "utf8");
-    await applyPatchSafely(patchFile, gitRunner);
+    await applyPatchSafely(patchFile, gitRunner, log);
     await fs.rm(patchFile, { force: true });
     await fs.rm(tempDir, { recursive: true, force: true });
+  } else {
+    log("Template diff is empty. Repository already matches template changes.");
   }
 
-  // Update patchworks config
   const updatedConfig: PatchworksConfig = {
     ...config,
     commit: nextTemplateCommit,
@@ -636,16 +504,7 @@ export async function runPatchworksUpdate(
     .filter((line) => line.length > 0);
 
   if (statusLines.length === 0) {
-    console.log(
-      "No changes to commit after applying template update. Exiting.",
-    );
-    if (outputFile) {
-      await fs.writeFile(
-        outputFile,
-        `${JSON.stringify(result, null, 2)}\n`,
-        "utf8",
-      );
-    }
+    log("No changes to commit after applying template update. Exiting.");
     return result;
   }
 
@@ -688,46 +547,12 @@ export async function runPatchworksUpdate(
     rejectFiles,
   });
 
-  if (commitChanges) {
-    await gitRunner(["add", "-A"]);
-    await gitRunner(["commit", "-m", commitMessage]);
-
-    if (shouldPush) {
-      await gitRunner(["push", "--force-with-lease", "origin", updateBranch]);
-    }
-  } else {
-    console.log(
-      "Patchworks update prepared. Review changes and commit at your convenience.",
-    );
-  }
-
-  if (shouldCreatePr && token) {
-    await createPullRequest(
-      token,
-      owner,
-      repo,
-      prTitle,
-      updateBranch,
-      baseBranch,
-      prBody,
-    );
-    console.log("Patchworks update completed successfully.");
-  }
-
   result.hasChanges = true;
   result.commitMessage = commitMessage;
   result.prTitle = prTitle;
   result.prBody = prBody;
   result.rejectFiles = rejectFiles;
   result.nextCommit = nextTemplateCommit;
-
-  if (outputFile) {
-    await fs.writeFile(
-      outputFile,
-      `${JSON.stringify(result, null, 2)}\n`,
-      "utf8",
-    );
-  }
 
   return result;
 }

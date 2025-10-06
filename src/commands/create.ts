@@ -185,7 +185,7 @@ export const createCommand = command({
 
       const majorVersion = version.split(".")[0];
 
-      const workflowContent = `name: Patchworks
+      const workflowContent = `name: patchworks
 
 on:
   workflow_dispatch:

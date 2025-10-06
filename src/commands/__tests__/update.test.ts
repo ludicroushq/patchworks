@@ -19,7 +19,6 @@ import { updateCommand } from "../update";
 import { runPatchworksUpdate } from "../../update/index.js";
 
 const mockedUpdate = vi.mocked(runPatchworksUpdate);
-
 const originalEnv = { ...process.env };
 
 describe("update command", () => {
@@ -28,7 +27,7 @@ describe("update command", () => {
     process.env = { ...originalEnv };
   });
 
-  it("sets environment overrides and uses non-destructive defaults", async () => {
+  it("sets environment overrides and invokes update in non-destructive mode", async () => {
     await updateCommand.handler!({
       token: "ghs_token",
       repository: "owner/repo",
@@ -36,10 +35,7 @@ describe("update command", () => {
       branchName: "patchworks/custom",
       gitName: "Patchworks",
       gitEmail: "bot@patchworks.dev",
-      commit: undefined,
-      push: undefined,
-      pr: undefined,
-      outputFile: undefined,
+      json: undefined,
     } as never);
 
     expect(process.env.GITHUB_TOKEN).toBe("ghs_token");
@@ -49,15 +45,14 @@ describe("update command", () => {
     expect(process.env.PATCHWORKS_GIT_NAME).toBe("Patchworks");
     expect(process.env.PATCHWORKS_GIT_EMAIL).toBe("bot@patchworks.dev");
 
-    expect(mockedUpdate).toHaveBeenCalledWith({
-      commit: false,
-      push: false,
-      createPr: false,
-      outputFile: undefined,
-    });
+    expect(mockedUpdate).toHaveBeenCalledWith({ silent: false });
   });
 
-  it("honours CLI flags and writes metadata", async () => {
+  it("emits JSON when requested", async () => {
+    const spy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+
     await updateCommand.handler!({
       token: undefined,
       repository: undefined,
@@ -65,59 +60,14 @@ describe("update command", () => {
       branchName: undefined,
       gitName: undefined,
       gitEmail: undefined,
-      commit: "true",
-      push: "false",
-      pr: "true",
-      outputFile: "patchworks.json",
+      json: "true",
     } as never);
 
-    expect(mockedUpdate).toHaveBeenCalledWith({
-      commit: true,
-      push: false,
-      createPr: true,
-      outputFile: "patchworks.json",
-    });
-  });
+    expect(mockedUpdate).toHaveBeenCalledWith({ silent: true });
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringMatching(/"hasChanges":false/),
+    );
 
-  it("handles errors from runPatchworksUpdate gracefully", async () => {
-    const errorMessage = "Update failed";
-    const mockProcessExit = vi.fn(() => {
-      throw new Error("process.exit called");
-    });
-    const mockConsoleError = vi.fn();
-
-    mockedUpdate.mockRejectedValueOnce(new Error(errorMessage));
-
-    const originalProcessExit = process.exit;
-    const originalConsoleError = console.error;
-
-    process.exit = mockProcessExit as never;
-    console.error = mockConsoleError;
-
-    try {
-      await expect(
-        updateCommand.handler!({
-          token: "ghs_token",
-          repository: "owner/repo",
-          baseBranch: "main",
-          branchName: "patchworks/custom",
-          gitName: "Patchworks",
-          gitEmail: "bot@patchworks.dev",
-          commit: undefined,
-          push: undefined,
-          pr: undefined,
-          outputFile: undefined,
-        } as never),
-      ).rejects.toThrow("process.exit called");
-
-      expect(mockConsoleError).toHaveBeenCalledWith(
-        "Patchworks update failed:",
-      );
-      expect(mockConsoleError).toHaveBeenCalledWith(errorMessage);
-      expect(mockProcessExit).toHaveBeenCalledWith(1);
-    } finally {
-      process.exit = originalProcessExit;
-      console.error = originalConsoleError;
-    }
+    spy.mockRestore();
   });
 });

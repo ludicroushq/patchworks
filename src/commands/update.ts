@@ -3,8 +3,11 @@ import chalk from "chalk";
 import { runPatchworksUpdate } from "../update/index.js";
 
 const parseBooleanFlag = (value: string | undefined, fallback: boolean) => {
-  if (value === undefined || value === "") {
+  if (value === undefined) {
     return fallback;
+  }
+  if (value === "") {
+    return true;
   }
 
   const normalized = value.toLowerCase();
@@ -37,14 +40,7 @@ export const updateCommand = command({
     gitEmail: string().desc(
       "Git author email (overrides PATCHWORKS_GIT_EMAIL)",
     ),
-    commit: string().desc("Whether to commit the changes (default: false)"),
-    push: string().desc(
-      "Whether to push the update branch (default: matches commit)",
-    ),
-    pr: string().desc(
-      "Whether to open a pull request (default: matches commit & push)",
-    ),
-    outputFile: string().desc("Write run metadata to the provided file path"),
+    json: string().desc("Emit JSON run metadata to stdout (suppresses logs)"),
   },
   handler: async (opts) => {
     try {
@@ -72,41 +68,32 @@ export const updateCommand = command({
         process.env.PATCHWORKS_GIT_EMAIL = opts.gitEmail;
       }
 
-      const commitFlag = parseBooleanFlag(opts.commit, false);
-      const pushFlag = parseBooleanFlag(opts.push, commitFlag);
-      const prFlag = parseBooleanFlag(opts.pr, commitFlag && pushFlag);
-      const outputFile = opts.outputFile || undefined;
+      const wantsJson = parseBooleanFlag(opts.json, false);
 
-      const result = await runPatchworksUpdate({
-        commit: commitFlag,
-        push: pushFlag,
-        createPr: prFlag,
-        outputFile,
-      });
+      const result = await runPatchworksUpdate({ silent: wantsJson });
+
+      if (wantsJson) {
+        process.stdout.write(`${JSON.stringify(result)}\n`);
+        return;
+      }
 
       if (!result.hasChanges) {
         console.log(chalk.yellow("No template updates to apply."));
-      } else {
-        const current = result.currentCommit.slice(0, 7);
-        const next = result.nextCommit.slice(0, 7);
-        console.log(
-          chalk.green(
-            `Prepared Patchworks update ${current} -> ${next} on branch ${result.branchName}`,
-          ),
-        );
-
-        if (!commitFlag) {
-          console.log(
-            chalk.blue(
-              "Changes are ready in your working tree. Review and commit when ready.",
-            ),
-          );
-        }
+        return;
       }
 
-      if (outputFile) {
-        console.log(chalk.gray(`Wrote run metadata to ${outputFile}`));
-      }
+      const current = result.currentCommit.slice(0, 7);
+      const next = result.nextCommit.slice(0, 7);
+      console.log(
+        chalk.green(
+          `Prepared Patchworks update ${current} -> ${next} on branch ${result.branchName}`,
+        ),
+      );
+      console.log(
+        chalk.blue(
+          "Changes are ready in your working tree. Review, commit, and open a PR when ready.",
+        ),
+      );
     } catch (error) {
       console.error(chalk.red("Patchworks update failed:"));
       console.error(error instanceof Error ? error.message : String(error));

@@ -7,62 +7,29 @@ inputs:
     description: |
       Package spec to install via npx (e.g. patchworks@latest or https://pkg.pr.new/org/patchworks@sha)
     default: patchworks@latest
-  patchworks-args:
-    description: "Additional arguments passed to the patchworks update command"
-    default: ""
-  node-version:
-    description: "Node.js version to install"
-    default: lts/*
-  branch-name:
-    description: "Override the branch used for Patchworks updates"
-    default: ""
-  base-branch:
-    description: "Override the base branch to sync against"
-    default: ""
-  git-name:
-    description: "Override the git author name"
-    default: ""
-  git-email:
-    description: "Override the git author email"
-    default: ""
-  skip-checkout:
-    description: "Set to true if the repository is already checked out"
-    default: "false"
-  token:
-    description: "Token passed to the update command; defaults to GITHUB_TOKEN env"
-    default: ""
 
 runs:
   using: "composite"
   steps:
     - name: Checkout repository
-      if: ${{ inputs.skip-checkout != 'true' }}
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: ${{ inputs.node-version }}
+        node-version: lts/*
     - name: Run Patchworks update
       shell: bash
       run: |
         set -euo pipefail
         PACKAGE_SPEC="${{ inputs.patchworks-package }}"
-        ARGS="${{ inputs.patchworks-args }}"
-        TOKEN="${{ inputs.token }}"
-        if [ -n "$TOKEN" ]; then
-          export GITHUB_TOKEN="$TOKEN"
-        fi
         if [ -z "$PACKAGE_SPEC" ]; then
           PACKAGE_SPEC="patchworks@latest"
         fi
-        npx --yes -p "$PACKAGE_SPEC" patchworks update --commit false --push false --pr false --output-file patchworks-output.json $ARGS
+        npx --yes -p "$PACKAGE_SPEC" patchworks update --json true > patchworks-output.json
       env:
-        PATCHWORKS_BRANCH_NAME: ${{ inputs.branch-name }}
-        PATCHWORKS_BASE_BRANCH: ${{ inputs.base-branch }}
-        PATCHWORKS_GIT_NAME: ${{ inputs.git-name }}
-        PATCHWORKS_GIT_EMAIL: ${{ inputs.git-email }}
+        PATCHWORKS_BRANCH_NAME: patchworks/update
     - name: Collect Patchworks metadata
       id: patchworks
       shell: bash
@@ -77,13 +44,13 @@ runs:
       if: steps.patchworks.outputs.has_changes == 'true'
       uses: peter-evans/create-pull-request@v7
       with:
-        token: ${{ inputs.token != '' && inputs.token || github.token }}
+        token: ${{ github.token }}
         branch: ${{ steps.patchworks.outputs.branch_name }}
         base: ${{ steps.patchworks.outputs.base_branch != '' && steps.patchworks.outputs.base_branch || github.ref_name }}
         commit-message: ${{ steps.patchworks.outputs.commit_message }}
         title: ${{ steps.patchworks.outputs.pr_title }}
         body: ${{ steps.patchworks.outputs.pr_body }}
-        author: ${{ inputs.git-name != '' && inputs.git-email != '' && format('{0} <{1}>', inputs.git-name, inputs.git-email) || 'Patchworks <bot@patchworks.dev>' }}
+        author: Patchworks <bot@patchworks.dev>
         committer: Patchworks <bot@patchworks.dev>
         branch-suffix: 'none'
 

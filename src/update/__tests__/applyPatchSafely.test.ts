@@ -13,7 +13,15 @@ describe("applyPatchSafely", () => {
 
     expect(gitRunner).toHaveBeenCalledTimes(1);
     expect(gitRunner).toHaveBeenCalledWith(
-      ["apply", "--reject", "--whitespace=nowarn", "patch.diff"],
+      [
+        "apply",
+        "--reject",
+        "--whitespace=fix",
+        "--ignore-space-change",
+        "--ignore-whitespace",
+        "--inaccurate-eof",
+        "patch.diff",
+      ],
       { allowFailure: true },
     );
   });

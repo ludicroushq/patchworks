@@ -119,51 +119,21 @@ describe("patchworks integration", () => {
   });
 
   it("updates repository to next template commit", async () => {
-    let prBody = "";
-    let prTitle = "";
-
-    await runPatchworksUpdate({
-      checkExistingPullRequest: async () => false,
-      createPullRequest: async (
-        _token,
-        _owner,
-        _repo,
-        title,
-        _head,
-        _base,
-        body,
-      ) => {
-        prTitle = title;
-        prBody = body;
-      },
-    });
+    const result = await runPatchworksUpdate();
 
     const configContents = JSON.parse(
       (await run("cat", [".patchworks.json"], projectDir)).stdout,
     ) as { commit: string };
     expect(configContents.commit).toBe(templateCommitV2);
 
-    const updateLog = (
-      await git(
-        ["log", "-1", "--pretty=format:%s", "patchworks/update"],
-        projectDir,
-      )
-    ).stdout;
-    expect(updateLog).toContain("Patchworks: sync");
-
     const workingFile = (await run("cat", ["hello.txt"], projectDir)).stdout;
     expect(workingFile).toBe("v2");
+    const status = (await git(["status", "--porcelain"], projectDir)).stdout;
+    expect(status).not.toBe("");
 
-    expect(prTitle).toContain(templateCommitV2.substring(0, 7));
-    expect(prBody).toContain("## Summary");
-    expect(prBody).toContain("## Rejects");
-
-    const remoteRefs = (
-      await git(
-        ["ls-remote", originDir, "refs/heads/patchworks/update"],
-        tempRoot,
-      )
-    ).stdout;
-    expect(remoteRefs).not.toBe("");
+    expect(result.hasChanges).toBe(true);
+    expect(result.nextCommit).toBe(templateCommitV2);
+    expect(result.prBody).toContain("## Summary");
+    expect(result.prBody).toContain("## Rejects");
   });
 });
