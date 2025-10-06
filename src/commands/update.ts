@@ -38,9 +38,7 @@ export const updateCommand = command({
       const current = result.currentCommit.slice(0, 7);
       const next = result.nextCommit.slice(0, 7);
       console.log(
-        chalk.green(
-          `Prepared Patchworks update ${current} -> ${next} on branch ${result.branchName}`,
-        ),
+        chalk.green(`Prepared Patchworks update ${current} -> ${next}`),
       );
       console.log(
         chalk.blue(

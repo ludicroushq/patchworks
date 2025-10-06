@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  patchworks: "link:"
+
 importers:
   .:
     dependencies:
@@ -16,6 +19,9 @@ importers:
       inquirer:
         specifier: ^12.5.2
         version: 12.9.6(@types/node@22.14.1)
+      patchworks:
+        specifier: "link:"
+        version: "link:"
       simple-git:
         specifier: ^3.27.0
         version: 3.28.0

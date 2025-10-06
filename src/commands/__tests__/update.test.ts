@@ -4,8 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../update/index.js", () => ({
   runPatchworksUpdate: vi.fn(async () => ({
     hasChanges: false,
-    branchName: "patchworks/update",
-    baseBranch: "main",
     commitMessage: "",
     prTitle: "",
     prBody: "",

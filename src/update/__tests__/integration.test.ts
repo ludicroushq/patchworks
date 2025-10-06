@@ -101,7 +101,6 @@ describe("patchworks integration", () => {
     process.env.GITHUB_WORKSPACE = projectDir;
     process.env.GITHUB_REPOSITORY = "owner/repo";
     process.env.GITHUB_TOKEN = "test-token";
-    process.env.PATCHWORKS_BRANCH_NAME = "patchworks/update";
 
     setWorkspaceForTesting(projectDir);
   });

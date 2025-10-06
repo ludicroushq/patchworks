@@ -139,23 +139,6 @@ export function toCompareUrl(
   return `https://github.com/${slug}/compare/${fromCommit}...${toCommit}`;
 }
 
-export function getRefName(): string {
-  if (process.env.PATCHWORKS_BASE_BRANCH) {
-    return process.env.PATCHWORKS_BASE_BRANCH;
-  }
-
-  if (process.env.GITHUB_REF_NAME) {
-    return process.env.GITHUB_REF_NAME;
-  }
-
-  const ref = process.env.GITHUB_REF;
-  if (ref?.startsWith("refs/heads/")) {
-    return ref.replace("refs/heads/", "");
-  }
-
-  return "main";
-}
-
 async function readConfig(configPath: string): Promise<PatchworksConfig> {
   if (!existsSync(configPath)) {
     throw new Error(
@@ -336,33 +319,8 @@ const defaultDependencies: PatchworksDependencies = {
   gitRunner: runGit,
 };
 
-async function resolveBaseBranch(
-  gitRunner: GitRunner,
-  log: (...args: unknown[]) => void,
-): Promise<string> {
-  if (process.env.PATCHWORKS_BASE_BRANCH) {
-    return process.env.PATCHWORKS_BASE_BRANCH;
-  }
-  if (process.env.GITHUB_REF_NAME) {
-    return process.env.GITHUB_REF_NAME;
-  }
-  const current = await gitRunner(["rev-parse", "--abbrev-ref", "HEAD"], {
-    allowFailure: true,
-  });
-  if (current.code === 0) {
-    const value = current.stdout.trim();
-    if (value.length > 0 && value !== "HEAD") {
-      return value;
-    }
-  }
-  log("Unable to determine current branch. Defaulting to main.");
-  return "main";
-}
-
 export type PatchworksResult = {
   hasChanges: boolean;
-  branchName: string;
-  baseBranch: string;
   commitMessage: string;
   prTitle: string;
   prBody: string;
@@ -407,13 +365,6 @@ export async function runPatchworksUpdate(
   log(`Template repository: ${templateRepo} (branch "${templateBranch}")`);
   log(`Current template commit: ${shortCurrent}`);
 
-  const baseBranch = await resolveBaseBranch(gitRunner, log);
-  log(`Using base branch: ${baseBranch}`);
-
-  const updateBranch =
-    process.env.PATCHWORKS_BRANCH_NAME ?? "patchworks/update";
-  log(`Using update branch: ${updateBranch}`);
-
   const dirtyStatus = await gitRunner(["status", "--short"], {
     allowFailure: true,
   });
@@ -424,18 +375,6 @@ ${dirtyStatus.stdout.trim()}`);
       "Working tree is not clean before running Patchworks update. Please ensure the repository has no pending changes.",
     );
   }
-
-  log("Fetching base branch...");
-  await gitRunner(["fetch", "origin", baseBranch]);
-
-  log("Checking out base branch...");
-  await gitRunner(["checkout", baseBranch]);
-
-  log("Updating base branch...");
-  await gitRunner(["pull", "--ff-only", "origin", baseBranch]);
-
-  log(`Checking out update branch ${updateBranch}...`);
-  await gitRunner(["checkout", "-B", updateBranch, baseBranch]);
 
   log("Fetching template history...");
   await fetchTemplate(
@@ -455,8 +394,6 @@ ${dirtyStatus.stdout.trim()}`);
     log("No commits found on template branch. Nothing to do.");
     return {
       hasChanges: false,
-      branchName: updateBranch,
-      baseBranch,
       commitMessage: "",
       prTitle: "",
       prBody: "",
@@ -478,8 +415,6 @@ ${dirtyStatus.stdout.trim()}`);
     log("Repository already matches the latest template commit.");
     return {
       hasChanges: false,
-      branchName: updateBranch,
-      baseBranch,
       commitMessage: "",
       prTitle: "",
       prBody: "",
@@ -541,8 +476,6 @@ ${dirtyStatus.stdout.trim()}`);
     log("No changes to commit after applying template update. Exiting.");
     return {
       hasChanges: false,
-      branchName: updateBranch,
-      baseBranch,
       commitMessage: "",
       prTitle: "",
       prBody: "",
@@ -595,8 +528,6 @@ ${dirtyStatus.stdout.trim()}`);
 
   return {
     hasChanges: true,
-    branchName: updateBranch,
-    baseBranch,
     commitMessage,
     prTitle,
     prBody,
@@ -604,17 +535,4 @@ ${dirtyStatus.stdout.trim()}`);
     currentCommit: currentTemplateCommit,
     nextCommit: nextTemplateCommit,
   };
-}
-
-const isTestEnvironment =
-  process.env.VITEST === "true" || process.env.NODE_ENV === "test";
-
-if (!isTestEnvironment) {
-  runPatchworksUpdate().catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
-    if (error instanceof Error && "stack" in error) {
-      console.error(error.stack);
-    }
-    process.exit(1);
-  });
 }

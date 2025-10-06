@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   buildPullRequestBody,
-  getRefName,
   parseGithubSlug,
   toCommitUrl,
   toCompareUrl,
@@ -42,34 +41,6 @@ describe("github urls", () => {
 
   it("returns null when slug missing", () => {
     expect(toCommitUrl("https://example.com/org/repo", "abc123")).toBeNull();
-  });
-});
-
-describe("getRefName", () => {
-  it("prefers PATCHWORKS_BASE_BRANCH", () => {
-    process.env.PATCHWORKS_BASE_BRANCH = "primary";
-    process.env.GITHUB_REF_NAME = "ignored";
-    expect(getRefName()).toBe("primary");
-  });
-
-  it("falls back to GITHUB_REF_NAME", () => {
-    delete process.env.PATCHWORKS_BASE_BRANCH;
-    process.env.GITHUB_REF_NAME = "feature";
-    expect(getRefName()).toBe("feature");
-  });
-
-  it("uses GITHUB_REF fallback", () => {
-    delete process.env.PATCHWORKS_BASE_BRANCH;
-    delete process.env.GITHUB_REF_NAME;
-    process.env.GITHUB_REF = "refs/heads/dev";
-    expect(getRefName()).toBe("dev");
-  });
-
-  it("defaults to main", () => {
-    delete process.env.PATCHWORKS_BASE_BRANCH;
-    delete process.env.GITHUB_REF_NAME;
-    delete process.env.GITHUB_REF;
-    expect(getRefName()).toBe("main");
   });
 });
 
