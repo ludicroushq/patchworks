@@ -36,7 +36,7 @@ Inputs let you override the Node version, branch name, base branch, git identity
 
 ### CLI Usage
 
-- `patchworks update` runs the same sync logic against the current repository. Use options like `--token`, `--repository`, `--branch-name`, or `--base-branch` to override environment values when invoking locally or from custom automation. By default it leaves changes in your working tree so you can inspect them before committing; add `--commit true --push true --pr true` to mimic the GitHub Action end-to-end.
+- `patchworks update` runs the same sync logic against the current repository and leaves the changes in your working tree so you can review them before committing. Add `--json` when you want structured metadata for scripts.
 - `GITHUB_TOKEN` (or `--token`) must have permission to push branches and create pull requests.
 
 The generated workflow grants `contents: write` and `pull-requests: write`, checks out the repository with `fetch-depth: 0`, and exposes `GITHUB_TOKEN` to the action. Advanced users can override behaviour with environment variables such as `PATCHWORKS_BASE_BRANCH`, `PATCHWORKS_BRANCH_NAME`, `PATCHWORKS_GIT_NAME`, and `PATCHWORKS_GIT_EMAIL`.
