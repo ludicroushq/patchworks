@@ -274,12 +274,18 @@ export function buildPullRequestBody(input: BuildPullRequestBodyInput): string {
     : "(no subject)";
 
   const bodyContent = commitBody?.trim() ?? "";
-  const commitDescriptionBlock = bodyContent
-    ? bodyContent
-        .split(/\r?\n/)
+  const bodyLines: string[] = [];
+  if (bodyContent.length > 0) {
+    const splitLines = bodyContent.split(/\r?\n/);
+    if (splitLines.length === 1) {
+      bodyLines.push(`Body: ${splitLines[0]}`);
+    } else {
+      const quoted = splitLines
         .map((line) => (line.length === 0 ? ">" : `> ${line}`))
-        .join("\n")
-    : "";
+        .join("\n");
+      bodyLines.push(`Body:\n${quoted}`);
+    }
+  }
 
   const metadataLines = [
     `- Template: ${templateRepo} (branch "${templateBranch}")`,
@@ -292,8 +298,8 @@ export function buildPullRequestBody(input: BuildPullRequestBodyInput): string {
 
   return [
     "## Changes",
-    `**${formattedSubject}**`,
-    commitDescriptionBlock,
+    `### Subject: **${formattedSubject}**`,
+    ...bodyLines,
     "## Rejects",
     rejectsList,
     "## Template Metadata",

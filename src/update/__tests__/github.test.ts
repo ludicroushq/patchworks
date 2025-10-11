@@ -60,8 +60,8 @@ describe("buildPullRequestBody", () => {
 
     expect(body).toContain("Diff: https://example.com/compare");
     expect(body).toContain("`src/file.rej`");
-    expect(body).toContain("**Update**");
-    expect(body).toContain("> Details about change.");
+    expect(body).toContain("### Subject: **Update**");
+    expect(body).toContain("Body: Details about change.");
     expect(body).toContain("## Template Metadata");
   });
 
@@ -81,5 +81,6 @@ describe("buildPullRequestBody", () => {
     expect(body).toContain("Commit: https://example.com/commit");
     expect(body).toContain("- None");
     expect(body).toContain("(no subject)");
+    expect(body).not.toContain("Body:");
   });
 });
