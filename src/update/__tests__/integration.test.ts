@@ -132,7 +132,9 @@ describe("patchworks integration", () => {
 
     expect(result.hasChanges).toBe(true);
     expect(result.nextCommit).toBe(templateCommitV2);
-    expect(result.prBody).toContain("## Summary");
+    expect(result.prBody).toContain("## Changes");
     expect(result.prBody).toContain("## Rejects");
+    expect(result.prBody).toContain("## Template Metadata");
+    expect(result.prBody).toContain("**template v2**");
   });
 });

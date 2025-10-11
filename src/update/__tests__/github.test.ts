@@ -52,6 +52,7 @@ describe("buildPullRequestBody", () => {
       currentCommit: "abc",
       nextCommit: "def",
       commitSubject: "Update",
+      commitBody: "Details about change.",
       compareUrl: "https://example.com/compare",
       commitUrl: null,
       rejectFiles: ["src/file.rej"],
@@ -59,6 +60,9 @@ describe("buildPullRequestBody", () => {
 
     expect(body).toContain("Diff: https://example.com/compare");
     expect(body).toContain("`src/file.rej`");
+    expect(body).toContain("**Update**");
+    expect(body).toContain("> Details about change.");
+    expect(body).toContain("## Template Metadata");
   });
 
   it("falls back to commit url and handles no rejects", () => {
@@ -68,6 +72,7 @@ describe("buildPullRequestBody", () => {
       currentCommit: "abc",
       nextCommit: "def",
       commitSubject: "",
+      commitBody: "",
       compareUrl: null,
       commitUrl: "https://example.com/commit",
       rejectFiles: [],

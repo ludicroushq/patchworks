@@ -186,6 +186,19 @@ async function getCommitSubject(
   return subject.stdout.trim();
 }
 
+async function getCommitBody(
+  gitRunner: GitRunner,
+  commit: string,
+): Promise<string> {
+  const body = await gitRunner([
+    "show",
+    "--no-patch",
+    "--pretty=format:%b",
+    commit,
+  ]);
+  return body.stdout.trim();
+}
+
 export async function applyPatchSafely(
   patchFile: string,
   gitRunner: GitRunner,
@@ -226,6 +239,7 @@ export type BuildPullRequestBodyInput = {
   currentCommit: string;
   nextCommit: string;
   commitSubject: string;
+  commitBody?: string | null;
   compareUrl?: string | null;
   commitUrl?: string | null;
   rejectFiles: string[];
@@ -238,6 +252,7 @@ export function buildPullRequestBody(input: BuildPullRequestBodyInput): string {
     currentCommit,
     nextCommit,
     commitSubject,
+    commitBody,
     compareUrl,
     commitUrl,
     rejectFiles,
@@ -247,22 +262,45 @@ export function buildPullRequestBody(input: BuildPullRequestBodyInput): string {
     ? `- Diff: ${compareUrl}`
     : commitUrl
       ? `- Commit: ${commitUrl}`
-      : "";
+      : null;
 
   const rejectsList =
     rejectFiles.length === 0
       ? "- None"
       : rejectFiles.map((file) => `- \`${file}\``).join("\n");
 
-  return `## Summary
-- Template: ${templateRepo} (branch "${templateBranch}")
-- Previous commit: ${currentCommit}
-- New commit: ${nextCommit}
-- Template message: ${commitSubject || "(no subject)"}
-${diffLink}
+  const formattedSubject = commitSubject.trim().length
+    ? commitSubject.trim()
+    : "(no subject)";
 
-## Rejects
-${rejectsList}`;
+  const bodyContent = commitBody?.trim() ?? "";
+  const commitDescriptionBlock = bodyContent
+    ? bodyContent
+        .split(/\r?\n/)
+        .map((line) => (line.length === 0 ? ">" : `> ${line}`))
+        .join("\n")
+    : "";
+
+  const metadataLines = [
+    `- Template: ${templateRepo} (branch "${templateBranch}")`,
+    diffLink,
+    `- Previous commit: ${currentCommit}`,
+    `- New commit: ${nextCommit}`,
+  ]
+    .filter((line): line is string => Boolean(line && line.length > 0))
+    .join("\n");
+
+  return [
+    "## Changes",
+    `**${formattedSubject}**`,
+    commitDescriptionBlock,
+    "## Rejects",
+    rejectsList,
+    "## Template Metadata",
+    metadataLines,
+  ]
+    .filter((section) => section && section.length > 0)
+    .join("\n\n");
 }
 
 type PatchworksDependencies = {
@@ -456,6 +494,7 @@ export async function runPatchworksUpdate(
   const commitMessage = `Patchworks: sync ${shortCurrent} -> ${shortNext}`;
 
   const commitSubject = await getCommitSubject(gitRunner, nextTemplateCommit);
+  const commitBody = await getCommitBody(gitRunner, nextTemplateCommit);
   const commitUrl = toCommitUrl(templateRepo, nextTemplateCommit);
   const compareUrl = toCompareUrl(
     templateRepo,
@@ -470,6 +509,7 @@ export async function runPatchworksUpdate(
     currentCommit: currentTemplateCommit,
     nextCommit: nextTemplateCommit,
     commitSubject,
+    commitBody,
     compareUrl,
     commitUrl,
     rejectFiles,
