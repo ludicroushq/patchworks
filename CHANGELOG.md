@@ -1,5 +1,11 @@
 # patchworks
 
+## 0.1.1
+
+### Patch Changes
+
+- f9eeb77: fix issue when file doesnt exist
+
 ## 0.1.0
 
 ### Minor Changes
