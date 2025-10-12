@@ -199,38 +199,118 @@ async function getCommitBody(
   return body.stdout.trim();
 }
 
+async function extractFilePaths(patchFile: string): Promise<string[]> {
+  const content = await fs.readFile(patchFile, "utf8");
+  const diffRegex = /^diff --git a\/(.+?) b\/(.+?)$/gm;
+  const paths = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = diffRegex.exec(content)) !== null) {
+    const toPath = match[2];
+    if (toPath) {
+      paths.add(toPath);
+    }
+  }
+
+  return Array.from(paths);
+}
+
 export async function applyPatchSafely(
   patchFile: string,
   gitRunner: GitRunner,
 ) {
-  const result = await gitRunner(
-    [
-      "apply",
-      "--reject",
-      "--whitespace=fix",
-      "--ignore-space-change",
-      "--ignore-whitespace",
-      "--inaccurate-eof",
-      patchFile,
-    ],
-    { allowFailure: true },
-  );
+  // Extract all file paths from the patch
+  const filePaths = await extractFilePaths(patchFile);
+
+  // Find which files don't exist and create empty placeholders
+  const missingFiles: string[] = [];
+  for (const filePath of filePaths) {
+    const fullPath = path.join(workspace, filePath);
+    if (!existsSync(fullPath)) {
+      missingFiles.push(filePath);
+      // Create parent directories if needed
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      // Create empty file
+      await fs.writeFile(fullPath, "", "utf8");
+    }
+  }
+
+  if (missingFiles.length > 0) {
+    console.log(
+      `Creating placeholder files for missing paths (will generate .rej files):`,
+    );
+    for (const file of missingFiles) {
+      console.log(`- ${file}`);
+    }
+  }
+
+  // Apply the patch with --reject
+  const baseArgs = [
+    "apply",
+    "--reject",
+    "--whitespace=fix",
+    "--ignore-space-change",
+    "--ignore-whitespace",
+    "--inaccurate-eof",
+  ];
+
+  const result = await gitRunner([...baseArgs, patchFile], {
+    allowFailure: true,
+  });
+
+  // Clean up empty placeholder files
+  for (const filePath of missingFiles) {
+    const fullPath = path.join(workspace, filePath);
+    try {
+      const content = await fs.readFile(fullPath, "utf8");
+      // Only delete if still empty (git didn't write anything)
+      if (content === "") {
+        await fs.unlink(fullPath);
+      }
+    } catch {
+      // File already deleted or doesn't exist, ignore
+    }
+  }
+
+  // Check if any changes were applied
+  const status = await gitRunner(["status", "--porcelain"]);
+  const hasChanges = status.stdout.trim().length > 0;
 
   if (result.code === 0) {
     return;
   }
 
-  const status = await gitRunner(["status", "--porcelain"]);
-  if (status.stdout.trim().length > 0) {
+  if (hasChanges) {
     console.log(
       "Patch applied with warnings. Some hunks may have been rejected (see .rej files if present).",
     );
     return;
   }
 
-  throw new Error(
+  // If we get here, nothing was applied successfully
+  const gitCommand = ["git", ...baseArgs, patchFile].join(" ");
+  const stdout = result.stdout.trim();
+  const stderr = result.stderr.trim();
+  const outputSections = [] as string[];
+
+  if (stdout.length > 0) {
+    outputSections.push(`stdout:\n${stdout}`);
+  }
+  if (stderr.length > 0) {
+    outputSections.push(`stderr:\n${stderr}`);
+  }
+
+  const messageParts = [
     "Failed to apply template diff. Manual intervention required.",
-  );
+    `Git command: ${gitCommand}`,
+    outputSections.length > 0
+      ? `Git output:\n${outputSections.join("\n\n")}`
+      : null,
+    `Patch file retained at: ${patchFile}`,
+    "Inspect any *.rej files and resolve conflicts, then rerun the update.",
+  ].filter(Boolean);
+
+  throw new Error(messageParts.join("\n\n"));
 }
 
 export type BuildPullRequestBodyInput = {
