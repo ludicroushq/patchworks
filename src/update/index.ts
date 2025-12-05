@@ -199,20 +199,42 @@ async function getCommitBody(
   return body.stdout.trim();
 }
 
-async function extractFilePaths(patchFile: string): Promise<string[]> {
+type PatchFileInfo = {
+  filePath: string;
+  requiresExistingFile: boolean;
+};
+
+async function extractPatchFileInfo(
+  patchFile: string,
+): Promise<PatchFileInfo[]> {
   const content = await fs.readFile(patchFile, "utf8");
   const diffRegex = /^diff --git a\/(.+?) b\/(.+?)$/gm;
-  const paths = new Set<string>();
+  const matches: Array<{ path: string; index: number }> = [];
   let match: RegExpExecArray | null;
 
   while ((match = diffRegex.exec(content)) !== null) {
     const toPath = match[2];
     if (toPath) {
-      paths.add(toPath);
+      matches.push({ path: toPath, index: match.index });
     }
   }
 
-  return Array.from(paths);
+  return matches.map((entry, idx) => {
+    const blockEnd =
+      idx + 1 < matches.length ? matches[idx + 1]!.index : content.length;
+    const block = content.slice(entry.index, blockEnd);
+    const isNewFile =
+      /new file mode /.test(block) ||
+      /Binary files\s+\/dev\/null\s+and\s+b\//.test(block) ||
+      /--- \/dev\/null/.test(block);
+    const isRenameOrCopy =
+      /rename from /.test(block) || /copy from /.test(block);
+
+    return {
+      filePath: entry.path,
+      requiresExistingFile: !(isNewFile || isRenameOrCopy),
+    };
+  });
 }
 
 export async function applyPatchSafely(
@@ -220,11 +242,14 @@ export async function applyPatchSafely(
   gitRunner: GitRunner,
 ) {
   // Extract all file paths from the patch
-  const filePaths = await extractFilePaths(patchFile);
+  const fileInfos = await extractPatchFileInfo(patchFile);
 
   // Find which files don't exist and create empty placeholders
   const missingFiles: string[] = [];
-  for (const filePath of filePaths) {
+  for (const { filePath, requiresExistingFile } of fileInfos) {
+    if (!requiresExistingFile) {
+      continue;
+    }
     const fullPath = path.join(workspace, filePath);
     if (!existsSync(fullPath)) {
       missingFiles.push(filePath);

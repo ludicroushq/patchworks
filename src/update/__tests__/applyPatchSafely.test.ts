@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -133,5 +133,58 @@ describe("applyPatchSafely", () => {
       { allowFailure: true },
     );
     expect(gitRunner).toHaveBeenNthCalledWith(2, ["status", "--porcelain"]);
+  });
+
+  it("does not create placeholders for new files in the patch", async () => {
+    const newFilePath = "mise.toml";
+    const diffContent = [
+      `diff --git a/${newFilePath} b/${newFilePath}`,
+      "new file mode 100644",
+      "index 0000000..1234567",
+      "--- /dev/null",
+      `+++ b/${newFilePath}`,
+      "@@ -0,0 +1,2 @@",
+      "+line 1",
+      "+line 2",
+      "",
+    ].join("\n");
+
+    const patchPath = path.join(tempDir, "patch.diff");
+    await writeFile(patchPath, diffContent, "utf8");
+
+    const gitRunner: GitRunner = vi
+      .fn()
+      .mockResolvedValueOnce(result(0))
+      .mockResolvedValueOnce(result(0, ""));
+
+    await applyPatchSafely(patchPath, gitRunner);
+
+    await expect(access(path.join(tempDir, newFilePath))).rejects.toThrow();
+    expect(gitRunner).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not create placeholders for rename targets", async () => {
+    const oldPath = "postcss.config.mjs";
+    const newPath = "postcss.config.js";
+    const diffContent = [
+      `diff --git a/${oldPath} b/${newPath}`,
+      "similarity index 100%",
+      `rename from ${oldPath}`,
+      `rename to ${newPath}`,
+      "",
+    ].join("\n");
+
+    const patchPath = path.join(tempDir, "patch.diff");
+    await writeFile(patchPath, diffContent, "utf8");
+
+    const gitRunner: GitRunner = vi
+      .fn()
+      .mockResolvedValueOnce(result(0))
+      .mockResolvedValueOnce(result(0, ""));
+
+    await applyPatchSafely(patchPath, gitRunner);
+
+    await expect(access(path.join(tempDir, newPath))).rejects.toThrow();
+    expect(gitRunner).toHaveBeenCalledTimes(2);
   });
 });
