@@ -1,5 +1,11 @@
 # patchworks
 
+## 0.1.2
+
+### Patch Changes
+
+- 0495df3: fix bug with new files
+
 ## 0.1.1
 
 ### Patch Changes
