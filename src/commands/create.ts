@@ -11,6 +11,55 @@ import * as tmp from "tmp";
 // Configure tmp to automatically clean up on process exit
 tmp.setGracefulCleanup();
 
+const unsafeGitEnvKeys = new Set([
+  "EDITOR",
+  "GIT_ASKPASS",
+  "GIT_CONFIG",
+  "GIT_CONFIG_COUNT",
+  "GIT_CONFIG_GLOBAL",
+  "GIT_CONFIG_SYSTEM",
+  "GIT_EDITOR",
+  "GIT_EXEC_PATH",
+  "GIT_EXTERNAL_DIFF",
+  "GIT_PAGER",
+  "GIT_PROXY_COMMAND",
+  "GIT_SEQUENCE_EDITOR",
+  "GIT_SSH",
+  "GIT_SSH_COMMAND",
+  "GIT_TEMPLATE_DIR",
+  "PAGER",
+  "PREFIX",
+  "SSH_ASKPASS",
+]);
+
+function isUnsafeGitEnvKey(key: string) {
+  const normalizedKey = key.toUpperCase();
+  return (
+    unsafeGitEnvKeys.has(normalizedKey) ||
+    /^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(normalizedKey)
+  );
+}
+
+export function createPatchworksCommitEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const commitEnv = { ...env };
+
+  for (const key of Object.keys(commitEnv)) {
+    if (isUnsafeGitEnvKey(key)) {
+      delete commitEnv[key];
+    }
+  }
+
+  return {
+    ...commitEnv,
+    GIT_AUTHOR_NAME: "Patchworks",
+    GIT_AUTHOR_EMAIL: "bot@patchworks.dev",
+    GIT_COMMITTER_NAME: "Patchworks",
+    GIT_COMMITTER_EMAIL: "bot@patchworks.dev",
+  };
+}
+
 export const createCommand = command({
   name: "create",
   desc: "Clone a template repository and initialize it for patchworks",
@@ -153,13 +202,7 @@ export const createCommand = command({
       // Add all files and create initial commit with explicit author and committer settings
       await git.add(".");
 
-      const commitEnv = {
-        ...process.env,
-        GIT_AUTHOR_NAME: "Patchworks",
-        GIT_AUTHOR_EMAIL: "bot@patchworks.dev",
-        GIT_COMMITTER_NAME: "Patchworks",
-        GIT_COMMITTER_EMAIL: "bot@patchworks.dev",
-      };
+      const commitEnv = createPatchworksCommitEnv();
 
       await git.env(commitEnv).commit("Initial commit");
 
