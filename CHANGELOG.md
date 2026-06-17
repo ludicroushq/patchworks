@@ -1,5 +1,11 @@
 # patchworks
 
+## 0.1.3
+
+### Patch Changes
+
+- 9da2eed: Prevent `patchworks create` from failing when the shell environment contains git editor, pager, askpass, or config injection variables blocked by newer simple-git releases.
+
 ## 0.1.2
 
 ### Patch Changes
