@@ -1,5 +1,11 @@
 # patchworks
 
+## 0.1.4
+
+### Patch Changes
+
+- 4621e1c: Modernize Patchworks with safer repository creation and deterministic, transactional template updates. Add structured conflict artifacts, stronger path and configuration validation, hardened GitHub Action automation, and comprehensive integration coverage.
+
 ## 0.1.3
 
 ### Patch Changes
