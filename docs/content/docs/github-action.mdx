@@ -1,15 +1,14 @@
 ---
 title: GitHub Action Setup
-description: Setting up the Patchworks GitHub Action
+description: Schedule safe Patchworks update pull requests with the official action
 ---
 
 # GitHub Action Setup
 
-Patchworks can automatically check for updates from your template repository using GitHub Actions. When you create a new project with `patchworks create`, a GitHub Action workflow file is automatically created for you.
-
-## Default Workflow
-
-The default workflow file is created at `.github/workflows/patchworks.yaml` and looks like this:
+`patchworks create` writes `.github/workflows/patchworks.yaml` with a nightly
+schedule, manual trigger, and the exact Patchworks action version that created
+it. The equivalent manual setup below uses the maintained `v0` release so it is
+ready to copy today:
 
 ```yaml
 name: Patchworks
@@ -19,48 +18,169 @@ on:
   schedule:
     - cron: "0 0 * * *"
 
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: patchworks-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
   patchworks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: ludicroushq/patchworks@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Use a GitHub App token or fine-grained PAT as PATCHWORKS_TOKEN when:
+      # - the template is private and cross-repository (template Contents read),
+      # - updates may change .github/workflows (Workflows write access), or
+      # - Patchworks pull requests must trigger normal CI without approval
+      #   (GITHUB_TOKEN-created runs are approval-gated).
+      # The token also needs Contents and Pull requests write on this repository.
+      - name: Update from template
+        uses: ludicroushq/patchworks@v0
+        with:
+          token: ${{ secrets.PATCHWORKS_TOKEN }}
 ```
 
-This workflow:
+An undefined `PATCHWORKS_TOKEN` secret produces an empty input, so the action
+falls back to the job's `GITHUB_TOKEN`. The concurrency group prevents two
+scheduled or manual runs from updating the same repository at once.
 
-- Can be manually triggered with `workflow_dispatch`
-- Runs automatically at midnight every day (`cron: '0 0 * * *'`)
-- Uses the latest version of the Patchworks GitHub Action
+## What a run does
 
-## Customizing the Schedule
+Before checkout, the action queries GitHub for an open pull request whose head
+is `patchworks/update`. If one exists, the action returns
+`status=pull-request-open` and stops. This protects human conflict resolutions
+from being replaced by a later scheduled run.
 
-You can customize the workflow file to change when it runs. For example, to run weekly instead of daily:
+If that update branch exists without an open pull request, Patchworks reuses it
+only when its head exactly matches the head of the newest merged Patchworks pull
+request. Otherwise it stops before checkout and asks you to inspect, rename, or
+delete the branch deliberately. This prevents an orphaned branch or human
+commits from being overwritten.
+
+With no open pull request, the action:
+
+1. Classifies the effective token and, when using `GITHUB_TOKEN`, warns that it
+   cannot verify the repository's Actions pull-request setting.
+2. Checks out the base branch with full history and without persisting
+   credentials.
+3. Executes `patchworks update --report <temporary-path>`.
+4. Reconciles the report with the real Git working tree, including unusual
+   filenames, reject artifacts, and changed workflow files.
+5. Uses
+   [`peter-evans/create-pull-request`](https://github.com/peter-evans/create-pull-request)
+   to open a pull request containing all prepared changes and a current reject
+   list. A conflicted update still opens a reviewable pull request.
+
+The action does not touch the update branch while its pull request is open.
+Merge or close that pull request before asking Patchworks to prepare the next
+template commit.
+
+Rewritten template history is not rebased automatically. Run the CLI locally,
+review the new history, and use `patchworks update --rebase` explicitly.
+
+## Version selection
+
+The generated workflow pins the exact action release matching the Patchworks
+package that created it: `uses` receives the package's full `v<semver>` tag. It
+never emits a moving `v0` reference. Upgrade that exact tag deliberately when
+adopting a new Patchworks release, or use a full commit SHA for the strongest
+immutable selection.
+
+At any action revision, Patchworks reads its checked-in
+`packages/patchworks/package.json` and executes that exact npm package version.
+It never installs `patchworks@latest`. The `patchworks-package` input is reserved
+for testing an exact package or immutable pkg.pr.new build before release.
+
+## Permissions
+
+The workflow needs:
 
 ```yaml
-name: Patchworks Weekly Check
+permissions:
+  contents: write
+  pull-requests: write
+```
 
+When using `GITHUB_TOKEN`, also enable **Settings → Actions → General → Workflow
+permissions → Allow GitHub Actions to create and approve pull requests**. An
+organization policy may lock this repository setting. `GITHUB_TOKEN` does not
+have the Administration permission required to inspect that setting, so
+Patchworks reports `permission-check=not-verifiable`, continues with a warning,
+and leaves pull-request creation as the final authority.
+
+### When a custom token is required
+
+GitHub does not let `GITHUB_TOKEN` push changes under `.github/workflows`, even
+when the job grants `contents: write`. Patchworks detects this case and stops
+before pull-request creation with the changed workflow paths listed.
+
+Pull-request workflow runs created with a repository's `GITHUB_TOKEN` are
+approval-gated rather than normal unattended CI. If Patchworks pull requests
+must start the repository's checks without manual approval, authenticate the
+update with a GitHub App token or PAT instead.
+
+Pass a GitHub App installation token or fine-grained personal access token
+through the action input:
+
+```yaml
+- uses: ludicroushq/patchworks@v0
+  with:
+    token: ${{ secrets.PATCHWORKS_TOKEN }}
+```
+
+The token needs Contents and Pull requests write access to the child repository.
+Add Workflows write access when template updates can change workflow files. For
+a private template in another repository on the same GitHub host, it also needs
+Contents read access there. The action scopes authentication to
+`github.server_url` and safely rewrites same-host HTTPS, SCP-style
+`git@host:path`, and `ssh://git@host/path` template URLs for that token. URLs on
+other hosts use their own ambient Git credentials and never receive the token.
+
+## Inputs
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `token` | `GITHUB_TOKEN` | Token used for same-host private templates, the update branch, pull-request creation, workflow updates, and unattended bot-PR CI |
+| `patchworks-package` | Package version matching the action revision | Exact npm package spec used for canary testing |
+| `branch` | `patchworks/update` | Pull-request branch |
+| `base` | Repository default branch | Pull-request base branch |
+| `author` | Triggering actor's no-reply identity | Commit author in `Name <email>` form |
+| `committer` | Triggering actor's no-reply identity | Commit committer in `Name <email>` form |
+
+## Outputs
+
+| Output | Description |
+| --- | --- |
+| `status` | `pull-request-open`, `up-to-date`, `updates-ready`, or `conflicts` |
+| `engine-status` | CLI status: `up-to-date`, `updated`, or `conflicts` |
+| `has-changes` | Whether the prepared working tree contains changes |
+| `has-rejects` | Whether reject artifacts were found |
+| `had-conflicts` | Whether the engine or artifact scan reported conflicts |
+| `reject-files` | Newline-delimited reject artifact paths |
+| `reject-files-json` | JSON array of reject artifact paths |
+| `workflow-changes` | Whether changed YAML files were found under `.github/workflows` |
+| `workflow-files` | Newline-delimited changed workflow paths |
+| `workflow-files-json` | JSON array of changed workflow paths |
+| `current-commit` | Template commit recorded before the update |
+| `next-commit` | Template commit prepared by the update |
+| `pull-request-url` | Existing or newly created update pull-request URL |
+| `pull-request-number` | Number returned for a newly created pull request |
+| `pull-request-operation` | Operation returned by the pull-request action |
+| `permission-check` | `custom-token`, `not-verifiable`, `not-needed`, `unknown`, or `missing-token` |
+
+`has-changes`, `has-rejects`, `had-conflicts`, `workflow-changes`, and the
+pull-request number are emitted as GitHub Action output strings.
+
+## Change the schedule
+
+GitHub cron schedules use UTC. For a weekly run at midnight Sunday UTC:
+
+```yaml
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * 0" # Run at midnight every Sunday
-
-jobs:
-  patchworks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: ludicroushq/patchworks@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - cron: "0 0 * * 0"
 ```
-
-> **Note:** The GitHub Action is currently under development. Check back for updates on additional features and options.
-
-## Advanced Inputs
-
-The action is a thin wrapper around the `patchworks update` CLI. The only configurable input is `patchworks-package`, which tells `npx` which version of Patchworks to run (e.g. `patchworks@latest`, `patchworks@0.0.3`, or a pkg.pr.new tarball).
-
-For local automation you can run the same command directly: `npx patchworks update` (add `--json` if you want structured output).
-
-Behind the scenes the composite action commits the prepared diff and opens a pull request with [`peter-evans/create-pull-request`](https://github.com/peter-evans/create-pull-request). If the update branch already has an open PR, the action updates that PR instead of creating duplicates.

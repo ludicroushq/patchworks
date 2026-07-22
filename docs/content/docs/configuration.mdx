@@ -1,40 +1,61 @@
 ---
 title: Configuration
-description: Understanding the Patchworks configuration file
+description: The template source and synchronization point recorded by Patchworks
 ---
 
 # Configuration
 
-Patchworks uses a configuration file named `.patchworks.json` at the root of your project to track information about your template repository.
-
-## Default Configuration
-
-When you create a new project with `patchworks create`, a configuration file is automatically created with contents similar to:
+Patchworks stores its state in `.patchworks.json` at the repository root.
+`patchworks create` writes a file similar to:
 
 ```json
 {
-  "version": "0.0.1",
+  "version": "0.1.3",
   "template": {
     "repository": "https://github.com/original/template",
     "branch": "main"
   },
-  "commit": "abc123def456..."
+  "commit": "0123456789abcdef0123456789abcdef01234567"
 }
 ```
 
-This configuration:
+## Fields
 
-- Tracks the Patchworks version used
-- Specifies the template repository URL and branch
-- Records the last synced commit hash
+| Field | Description |
+| --- | --- |
+| `version` | Patchworks version that created the repository; optional for older configurations |
+| `template.repository` | Git repository used as the template; HTTPS, SSH, SCP-style, and local paths are supported |
+| `template.branch` | Branch whose first-parent history is followed; defaults to `main` when omitted |
+| `commit` | Full 40- or 64-character object ID of the last prepared template commit |
 
-## Configuration Fields
+Unknown top-level fields are preserved when Patchworks advances the commit.
 
-| Field                 | Description                                            |
-| --------------------- | ------------------------------------------------------ |
-| `version`             | The version of Patchworks used to create the project   |
-| `template.repository` | The URL of the template repository                     |
-| `template.branch`     | The branch of the template repository to track         |
-| `commit`              | The last commit hash that was synced from the template |
+For a local template, `create` records the resolved absolute repository path.
+HTTP URLs containing embedded credentials are rejected. Use a Git credential
+helper locally or the GitHub Action's `token` input instead of storing secrets in
+this file.
 
-> **Note:** Additional configuration options for customizing the sync behavior are planned for future releases.
+## How the commit advances
+
+Each normal `patchworks update` prepares exactly one commit after `commit` on
+the configured branch's first-parent path. The configuration advances in the
+same unstaged working-tree diff as the template changes, including when reject
+artifacts require manual resolution.
+
+Review and commit the configuration with the resolved update. Do not advance it
+independently: the object ID is the base tree Patchworks needs for the next diff.
+
+If the recorded commit exists but is no longer on the branch's first-parent
+history, the CLI requires an explicit `--rebase`. If the object was pruned and
+is not fetchable, Patchworks cannot recover its tree from the configuration
+alone.
+
+## File safety
+
+`.patchworks.json` must be a regular file no larger than 1 MiB. Symbolic links
+are not allowed. Patchworks validates the JSON and its repository, branch, and
+commit fields before fetching anything, then replaces the file atomically while
+preserving its permission mode.
+
+Templates may not supply `.patchworks.json`; the path is reserved for the child
+repository's synchronization state.

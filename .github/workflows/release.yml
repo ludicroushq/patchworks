@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Check repository
+        run: bun run check
+
+      - name: Create release pull request or publish
+        id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          version: bun run version
+          publish: bun run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
+
+      - name: Reconcile matching action tags
+        env:
+          CHANGESETS_PUBLISHED: ${{ steps.changesets.outputs.published }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pending_changeset=""
+          while IFS= read -r candidate; do
+            if [[ "$candidate" == .changeset/*.md && "$candidate" != ".changeset/README.md" ]]; then
+              pending_changeset="$candidate"
+              break
+            fi
+          done < <(git ls-tree -r --name-only "$GITHUB_SHA" -- .changeset)
+          if [[ -n "$pending_changeset" ]]; then
+            echo "Pending changeset found at $pending_changeset; action tags remain unchanged."
+            exit 0
+          fi
+
+          read_package_version() {
+            node -e 'const fs = require("node:fs"); const packageJson = JSON.parse(fs.readFileSync(0, "utf8")); process.stdout.write(packageJson.version);'
+          }
+
+          version="$(
+            git show "$GITHUB_SHA:packages/patchworks/package.json" |
+              read_package_version
+          )"
+          immutable="v$version"
+          major="v${version%%.*}"
+
+          git fetch --force --tags origin
+
+          parent_version="$(
+            git show "${GITHUB_SHA}^1:packages/patchworks/package.json" 2>/dev/null |
+              read_package_version 2>/dev/null || true
+          )"
+          release_commit="false"
+          if [[ "$CHANGESETS_PUBLISHED" == "true" || "$parent_version" != "$version" ]]; then
+            release_commit="true"
+          fi
+
+          if git rev-parse --verify --quiet "refs/tags/$immutable" >/dev/null; then
+            tag_target="$(git rev-parse "refs/tags/$immutable^{commit}")"
+            if [[ "$release_commit" == "true" && "$tag_target" != "$GITHUB_SHA" ]]; then
+              echo "$immutable already points to $tag_target, not release commit $GITHUB_SHA; refusing to move an immutable tag." >&2
+              exit 1
+            fi
+          else
+            if [[ "$release_commit" != "true" ]]; then
+              echo "$immutable is missing, but this commit did not introduce version $version; action tags remain unchanged."
+              exit 0
+            fi
+
+            published=""
+            for attempt in 1 2 3 4 5 6; do
+              published="$(npm view "patchworks@$version" version 2>/dev/null || true)"
+              if [[ "$published" == "$version" ]]; then
+                break
+              fi
+
+              if [[ "$attempt" -lt 6 ]]; then
+                echo "patchworks@$version is not visible on npm yet; retrying ($attempt/6)."
+                sleep "$((attempt * 2))"
+              fi
+            done
+
+            if [[ "$published" != "$version" ]]; then
+              echo "Expected patchworks@$version on npm, received '$published'" >&2
+              exit 1
+            fi
+
+            tag_target="$GITHUB_SHA"
+            git tag "$immutable" "$tag_target"
+          fi
+
+          git tag --force "$major" "$tag_target"
+          git push --atomic origin \
+            "refs/tags/$immutable:refs/tags/$immutable" \
+            "+refs/tags/$major:refs/tags/$major"

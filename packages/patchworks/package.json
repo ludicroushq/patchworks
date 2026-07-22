@@ -1,0 +1,67 @@
+{
+  "name": "patchworks",
+  "version": "0.1.3",
+  "description": "Keep a repository synchronized with its template one commit at a time.",
+  "type": "module",
+  "bin": {
+    "patchworks": "./dist/index.mjs"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": true,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo .turbo",
+    "dev": "tsdown --watch",
+    "test": "vitest run --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@drizzle-team/brocli": "^0.11.0",
+    "chalk": "^5.4.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ludicroushq/patchworks.git",
+    "directory": "packages/patchworks"
+  },
+  "keywords": [
+    "patchworks",
+    "template",
+    "synchronization",
+    "git",
+    "github-actions"
+  ],
+  "author": "ludicrous LLC",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ludicroushq/patchworks/issues"
+  },
+  "homepage": "https://patchworks.dev"
+}

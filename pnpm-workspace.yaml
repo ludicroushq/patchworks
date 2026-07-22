@@ -1,5 +1,0 @@
-packages:
-  - docs
-
-overrides:
-  patchworks: "link:"

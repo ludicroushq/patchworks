@@ -1,68 +1,151 @@
 ---
 title: CLI Reference
-description: Complete reference for the Patchworks CLI commands
+description: Commands and safety behavior for the Patchworks CLI
 ---
 
 # CLI Reference
 
-Patchworks provides a command-line interface (CLI) for managing template repositories.
+## Global options
 
-## Global Options
+- `--help` displays help for Patchworks or a command.
+- `--version` displays the installed Patchworks version.
 
-These options are available for all commands:
-
-- `--help`: Display help for a command
-- `--version`: Display the version of Patchworks
-
-## Commands
-
-### create
+## `create`
 
 Create a new project from a template repository.
 
 ```bash
-patchworks create <repoUrl> [destination] [options]
+patchworks create <repository> [destination] [options]
 ```
 
-**Arguments:**
+### Arguments
 
-- `repoUrl`: URL of the repository to clone (e.g. https://github.com/user/repo)
-- `destination`: (Optional) Destination folder name
+| Argument | Description |
+| --- | --- |
+| `repository` | HTTPS, SSH, SCP-style, or local Git repository to use as the template |
+| `destination` | Destination directory; Patchworks prompts with the repository name when omitted |
 
-**Options:**
+### Options
 
-- `--branch <branch>`: Branch to clone (if not specified, uses default branch)
-
-**Example:**
+| Option | Description |
+| --- | --- |
+| `--branch <branch>` | Template branch to follow; defaults to the remote's default branch, then `main` if detection fails |
 
 ```bash
-patchworks create https://github.com/original/template my-project --branch develop
+patchworks create https://github.com/original/template my-project
+patchworks create git@github.com:original/template.git my-project --branch next
 ```
 
-This command:
+Patchworks shallow-clones the selected branch into a temporary sibling
+directory. It creates a parentless commit from the template's exact Git tree,
+removes the template remote and reachable history, then commits its configuration
+and scheduled workflow.
 
-- Clones the template repository to the specified directory
-- Removes the original git history and initializes a new git repository
-- Creates a `.patchworks.json` configuration file to track the template source
-- Sets up a GitHub Action workflow to check for updates
+When invoked locally, Patchworks uses the effective Git `user.name` and
+`user.email` from the invocation directory for both generated commits. This
+honors repository-local settings while ignoring `GIT_*` environment overrides.
+If either value is missing, `create` stops before cloning and shows the
+`git config --global` commands needed to configure it. Names and addresses
+containing control characters or angle brackets are rejected instead of being
+passed to Git as ambiguous identity data.
 
-> **Note:** Additional commands for managing template updates are planned for future releases.
+When `create` runs in GitHub Actions, it uses `GITHUB_ACTOR` as the name and
+`<GITHUB_ACTOR_ID>+<GITHUB_ACTOR>@users.noreply.github.com` as the email. The
+username-only noreply address is used only if `GITHUB_ACTOR_ID` is absent; a
+missing actor or malformed actor ID is an error.
 
-### update
+This commit-tree approach preserves Git's view of the source, including tracked
+ignored files, file modes, binary data, symbolic links, and Git links. It does
+not copy a working directory and run `git add .`.
 
-Sync the current repository with the latest changes from its template.
+The paths `.patchworks.json` and `.github/workflows/patchworks.yaml` are
+reserved. Creation fails instead of overwriting either path, a symbolic-link
+ancestor, or a non-directory `.github` path. A destination must be missing or
+empty and is populated only after setup completes. The generated workflow pins
+the exact `v<semver>` action release matching the installed Patchworks package;
+upgrade that reference intentionally when adopting a newer release.
+
+## `update`
+
+Prepare the next template commit in the current repository.
 
 ```bash
 patchworks update [options]
 ```
 
-**Options:**
+### Options
 
-- `--token <token>`: GitHub token to authenticate pushes and PR creation (defaults to `GITHUB_TOKEN`).
-- `--repository <owner/repo>`: Override the repository slug detected from the environment.
-- `--base-branch <branch>`: Branch to use as the base when generating updates.
-- `--branch-name <branch>`: Branch name for the Patchworks update commit.
-- `--git-name <name>` / `--git-email <email>`: Override commit author information.
-- `--json`: Emit run metadata as JSON on stdout (suppresses normal logging; useful for scripting).
+| Option | Description |
+| --- | --- |
+| `--report <path>` | Write the successful run result as formatted JSON |
+| `--rebase` | Explicitly apply an aggregate diff when the recorded commit is no longer on the template branch's first-parent history |
 
-Run this inside your project directory (or from CI) to apply a single template commit and update `.patchworks.json`. By default it leaves the changes in your working tree so you can review them before committing or opening a PR. Pair it with `--json` if you need structured output for automation.
+`update` resolves the repository root from the current directory and requires a
+completely clean working tree. It fetches the configured branch into a temporary
+Git ref without adding a remote, locates the next first-parent commit, and
+applies that commit's strict binary patch. `.patchworks.json` advances to the
+prepared commit.
+
+The result is intentionally not committed or pushed. Normal file changes are
+left unstaged. Review it with:
+
+```bash
+git status --short
+git diff
+git diff --cached
+```
+
+New files are marked intent-to-add so their contents also appear in the plain
+diff; their contents are not staged.
+
+Gitlink changes are the sole staging exception. A submodule pointer is an index
+entry with no standalone worktree representation, so Patchworks preserves that
+entry staged. When changed paths include a submodule, inspect
+`git diff --cached` before committing.
+
+### Conflicts and rejects
+
+When Git cannot apply every hunk, Patchworks keeps the partial update and
+returns a `conflicts` result. It moves reject data out of the changed source
+tree and into a commit-specific directory:
+
+```text
+.patchworks-rejects/<template-commit>/template.patch
+.patchworks-rejects/<template-commit>/files/<path>.rej
+```
+
+The full patch is always available for a conflicted update. Resolve the source,
+remove every artifact in that directory, validate the project, and commit the
+whole update together. A conflict is a prepared review state, so the command can
+exit successfully; automation should inspect the report status.
+
+Patchworks refuses to overwrite an existing reject directory, an existing
+`.rej` path, ignored or untracked files at template targets, or paths whose
+ancestors are symbolic links.
+
+### Reports
+
+`--report <path>` writes the update result as JSON after a successful run. The
+stable engine status is one of `up-to-date`, `updated`, or `conflicts`. The
+report also includes the old and new template commits, changed and reject paths,
+staged Gitlink paths, workflow-change detection, commit and pull-request text,
+rebase state, and warnings.
+
+### Rewritten history
+
+Normal updates require the recorded commit to appear on the configured branch's
+first-parent path. Patchworks stops if the commit moved to a side branch or the
+branch was rewritten.
+
+After reviewing the replacement history, pass `--rebase` to apply one aggregate
+diff from the recorded commit to the new branch tip. This is intentionally
+explicit because it can be much larger than a normal update.
+
+The recorded Git object must still exist locally or be fetchable from the
+template. If it was pruned and cannot be fetched by object ID, Patchworks cannot
+reconstruct the old tree or calculate a safe diff. Restore the object or migrate
+`.patchworks.json` deliberately before continuing.
+
+Authentication for private templates comes from normal Git credentials. The
+CLI does not accept a token flag; the GitHub Action injects its token without
+persisting it in repository configuration.

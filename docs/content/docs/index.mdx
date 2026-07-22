@@ -1,40 +1,100 @@
 ---
 title: Getting Started
-description: Learn how to use Patchworks to keep your templates in sync
+description: Keep a project synchronized with its template, one reviewable commit at a time
 ---
 
 # Patchworks
 
-Patchworks is a tool that helps you keep your repositories in sync with their template sources. When you clone a template repository, you lose the connection to the original template. If the template author fixes a bug or makes an improvement, there's no easy way to pull those changes into your repository.
+Patchworks keeps a project connected to the template it came from. It records
+the exact template commit, then prepares later changes from the template's
+first-parent history one commit at a time.
 
-## Installation
+This is deliberately different from merging an upstream remote. Your project
+can diverge freely, and every template update remains a normal working-tree diff
+or pull request that you review before accepting.
+
+## Install
 
 ```bash
-pnpm add --global patchworks
-# or: npm install -g patchworks
+npm install --global patchworks
+# or
+bun add --global patchworks
 ```
 
-## Basic Usage
+Patchworks requires Node.js 18 or newer.
 
-### Create a new project from a template
+Install the official skill when a coding agent will apply and validate updates:
 
 ```bash
-# Create a new project based on a template repository
+npx skills add ludicroushq/patchworks --skill patchworks-update
+```
+
+## Create a project
+
+```bash
 patchworks create https://github.com/original/template my-project
-
-# Specify a branch other than 'main'
-patchworks create https://github.com/original/template my-project --branch develop
+cd my-project
 ```
 
-This will:
+To follow a non-default branch:
 
-- Clone the template repository to your specified directory
-- Set up tracking information for future updates
-- Create a GitHub Action workflow to check for updates
+```bash
+patchworks create https://github.com/original/template my-project --branch next
+```
 
-## Next Steps
+The new repository contains two commits:
+
+1. `Initial commit`, whose tree exactly matches the selected template commit.
+2. `Configure Patchworks`, which adds `.patchworks.json` and the scheduled
+   GitHub Actions workflow.
+
+The exact-tree setup preserves tracked ignored files, executable modes, binary
+content, and Git links. Patchworks removes the template remote and reachable
+history. It refuses to overwrite its reserved files or write through symbolic
+links, and it only moves the new repository into place after setup succeeds.
+
+Local creation attributes both commits to the effective Git `user.name` and
+`user.email` where the command was invoked. Configure both first; Patchworks
+fails rather than inventing an identity when either is missing.
+
+## Prepare the next update
+
+```bash
+patchworks update
+git status --short
+git diff
+git diff --cached
+```
+
+The working tree must be clean before the update starts. Patchworks fetches the
+configured template branch, applies the next first-parent commit with a strict
+binary-capable patch, advances `.patchworks.json`, and leaves normal file
+changes unstaged for plain `git diff` review.
+
+A Gitlink is the one exception. Submodule pointers have no worktree content, so
+Patchworks leaves those index entries staged; review them with
+`git diff --cached`.
+
+If a patch conflicts, the working tree contains the cleanly applied portions.
+The complete patch and per-file rejects are collected under
+`.patchworks-rejects/<commit>/`. Resolve the code and remove every artifact
+before committing.
+
+Run `patchworks update` again after committing to prepare the following template
+commit.
+
+## Automate the review
+
+`patchworks create` also adds a nightly GitHub Action. It opens one update pull
+request at a time and skips scheduled runs while that pull request remains
+open, preserving any human conflict resolutions already pushed to the branch.
+The generated workflow pins the exact Patchworks `v<semver>` action release so
+upgrades are deliberate. Use a GitHub App token or fine-grained PAT when a
+private template is in another repository, workflow files may change, or the
+resulting pull request must trigger unattended CI without approval.
 
 <Cards>
-  <Card title="GitHub Action Setup" href="/docs/github-action" />
+  <Card title="CLI reference" href="/docs/cli-reference" />
   <Card title="Configuration" href="/docs/configuration" />
+  <Card title="GitHub Action setup" href="/docs/github-action" />
 </Cards>

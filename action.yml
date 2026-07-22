@@ -1,59 +1,162 @@
-name: "patchworks"
-description: "sync your repository with updates from its template source"
-author: "ludicrous"
+name: "Patchworks"
+description: "Safely sync a repository with the next commit from its Patchworks template"
+author: "Ludicrous"
 
 inputs:
+  token:
+    description: |
+      Token used to fetch private templates on github.server_url, push the update branch, and create the pull request.
+      Same-host HTTPS, git@host:path, and ssh://git@host/path template URLs are authenticated;
+      other hosts use their ambient Git credentials and never receive this token.
+      Leave blank to use GITHUB_TOKEN. Updates that modify .github/workflows require a GitHub App
+      or fine-grained personal access token with Contents, Pull requests, and Workflows write access.
+    required: false
+    default: ""
   patchworks-package:
     description: |
-      Package spec to install via npx (e.g. patchworks@latest or https://pkg.pr.new/org/patchworks@sha)
-    default: patchworks@latest
+      Exact Patchworks npm package spec to execute. By default the action reads the version from
+      its checked-in packages/patchworks/package.json and installs that exact version. This input
+      is primarily for testing immutable pkg.pr.new builds.
+    required: false
+    default: ""
+  branch:
+    description: "Branch used for the Patchworks pull request"
+    required: false
+    default: "patchworks/update"
+  base:
+    description: "Pull request base branch; defaults to the repository's default branch"
+    required: false
+    default: ""
+  author:
+    description: "Optional commit author in 'Name <email>' format"
+    required: false
+    default: ""
+  committer:
+    description: "Optional commit committer in 'Name <email>' format"
+    required: false
+    default: ""
+
+outputs:
+  status:
+    description: "Stable result: pull-request-open, up-to-date, updates-ready, or conflicts"
+    value: ${{ steps.preflight.outputs.skip == 'true' && 'pull-request-open' || steps.patchworks.outputs.status }}
+  engine-status:
+    description: "Status reported by the Patchworks CLI, when present"
+    value: ${{ steps.patchworks.outputs.engine_status }}
+  has-changes:
+    description: "Whether the update changed the working tree"
+    value: ${{ steps.preflight.outputs.skip == 'true' && 'false' || steps.patchworks.outputs.has_changes }}
+  has-rejects:
+    description: "Whether the update produced any reject artifacts"
+    value: ${{ steps.patchworks.outputs.has_rejects }}
+  had-conflicts:
+    description: "Whether the Patchworks engine encountered conflicts"
+    value: ${{ steps.patchworks.outputs.had_conflicts }}
+  reject-files:
+    description: "Newline-delimited reject artifact paths"
+    value: ${{ steps.patchworks.outputs.reject_files }}
+  reject-files-json:
+    description: "JSON array of reject artifact paths"
+    value: ${{ steps.patchworks.outputs.reject_files_json }}
+  workflow-changes:
+    description: "Whether the update changes YAML files under .github/workflows"
+    value: ${{ steps.patchworks.outputs.workflow_changes }}
+  workflow-files:
+    description: "Newline-delimited changed workflow file paths"
+    value: ${{ steps.patchworks.outputs.workflow_files }}
+  workflow-files-json:
+    description: "JSON array of changed workflow file paths"
+    value: ${{ steps.patchworks.outputs.workflow_files_json }}
+  current-commit:
+    description: "Template commit recorded before the update"
+    value: ${{ steps.patchworks.outputs.current_commit }}
+  next-commit:
+    description: "Template commit prepared by this update"
+    value: ${{ steps.patchworks.outputs.next_commit }}
+  pull-request-url:
+    description: "Existing or newly created Patchworks pull request URL"
+    value: ${{ steps.preflight.outputs.pull_request_url || steps.pull_request.outputs.pull-request-url }}
+  pull-request-number:
+    description: "Newly created Patchworks pull request number"
+    value: ${{ steps.pull_request.outputs.pull-request-number }}
+  pull-request-operation:
+    description: "Operation reported by create-pull-request"
+    value: ${{ steps.pull_request.outputs.pull-request-operation }}
+  permission-check:
+    description: "Result of the repository pull-request permission preflight"
+    value: ${{ steps.preflight.outputs.permission_check }}
 
 runs:
   using: "composite"
   steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 24
+
+    - name: Check Patchworks pull request and branch safety
+      id: preflight
+      shell: bash
+      env:
+        PATCHWORKS_API_URL: ${{ github.api_url }}
+        PATCHWORKS_BRANCH: ${{ inputs.branch }}
+        PATCHWORKS_CUSTOM_TOKEN: ${{ (inputs.token || env.GITHUB_TOKEN || github.token) != github.token }}
+        PATCHWORKS_REPOSITORY: ${{ github.repository }}
+        PATCHWORKS_TOKEN: ${{ inputs.token || env.GITHUB_TOKEN || github.token }}
+      run: node "$GITHUB_ACTION_PATH/action/entrypoint.mjs" preflight
+
     - name: Checkout repository
-      uses: actions/checkout@v4
+      if: steps.preflight.outputs.skip != 'true'
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
+        persist-credentials: false
+        ref: ${{ inputs.base || github.event.repository.default_branch }}
+        token: ${{ inputs.token || env.GITHUB_TOKEN || github.token }}
+
     - name: Run Patchworks update
+      if: steps.preflight.outputs.skip != 'true'
+      id: update
       shell: bash
-      run: |
-        set -euo pipefail
-        PACKAGE_SPEC="${{ inputs.patchworks-package }}"
-        if [ -z "$PACKAGE_SPEC" ]; then
-          PACKAGE_SPEC="patchworks@latest"
-        fi
-        REPORT_DIR="$(mktemp -d)"
-        REPORT_PATH="$REPORT_DIR/patchworks-output.json"
-        echo "PATCHWORKS_REPORT=$REPORT_PATH" >> "$GITHUB_ENV"
-        npx --yes -p "$PACKAGE_SPEC" patchworks update --report "$REPORT_PATH"
+      env:
+        PATCHWORKS_ACTION_PATH: ${{ github.action_path }}
+        PATCHWORKS_PACKAGE: ${{ inputs.patchworks-package }}
+        PATCHWORKS_SERVER_URL: ${{ github.server_url }}
+        PATCHWORKS_TOKEN: ${{ inputs.token || env.GITHUB_TOKEN || github.token }}
+        PATCHWORKS_WORKSPACE: ${{ github.workspace }}
+      run: node "$GITHUB_ACTION_PATH/action/entrypoint.mjs" update
+
     - name: Collect Patchworks metadata
+      if: steps.preflight.outputs.skip != 'true'
       id: patchworks
       shell: bash
-      run: |
-        set -euo pipefail
-        REPORT_PATH="${PATCHWORKS_REPORT:-patchworks-output.json}"
-        if [ ! -f "$REPORT_PATH" ]; then
-          echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-        npx --yes tsx "$GITHUB_ACTION_PATH/scripts/write-github-output.ts" "$REPORT_PATH"
-    - name: Create or update Patchworks pull request
-      if: steps.patchworks.outputs.has_changes == 'true'
-      uses: peter-evans/create-pull-request@v7
+      env:
+        PATCHWORKS_REPORT: ${{ steps.update.outputs.report_path }}
+        PATCHWORKS_WORKSPACE: ${{ github.workspace }}
+      run: node "$GITHUB_ACTION_PATH/action/entrypoint.mjs" collect
+
+    - name: Check workflow update permissions
+      if: steps.preflight.outputs.skip != 'true' && steps.patchworks.outputs.has_changes == 'true'
+      shell: bash
+      env:
+        PATCHWORKS_CUSTOM_TOKEN: ${{ (inputs.token || env.GITHUB_TOKEN || github.token) != github.token }}
+        PATCHWORKS_WORKFLOW_FILES_JSON: ${{ steps.patchworks.outputs.workflow_files_json }}
+      run: node "$GITHUB_ACTION_PATH/action/entrypoint.mjs" guard-workflows
+
+    - name: Create Patchworks pull request
+      if: steps.preflight.outputs.skip != 'true' && steps.patchworks.outputs.has_changes == 'true'
+      id: pull_request
+      uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
       with:
-        token: ${{ github.token }}
-        branch: patchworks/update
-        base: ${{ github.ref_name }}
+        add-paths: "."
+        author: ${{ inputs.author || format('{0} <{1}+{0}@users.noreply.github.com>', github.actor, github.actor_id) }}
+        base: ${{ inputs.base || github.event.repository.default_branch }}
+        branch: ${{ inputs.branch }}
         commit-message: ${{ steps.patchworks.outputs.commit_message }}
+        committer: ${{ inputs.committer || format('{0} <{1}+{0}@users.noreply.github.com>', github.actor, github.actor_id) }}
         title: ${{ steps.patchworks.outputs.pr_title }}
         body: ${{ steps.patchworks.outputs.pr_body }}
-        author: Patchworks <bot@patchworks.dev>
-        committer: Patchworks <bot@patchworks.dev>
+        token: ${{ inputs.token || env.GITHUB_TOKEN || github.token }}
 
 branding:
   icon: "copy"

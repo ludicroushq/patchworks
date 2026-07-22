@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "isolatedDeclarations": false,
+    "noEmit": true,
+    "types": [
+      "bun",
+      "node",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "packages/*/test/**/*.ts",
+    "packages/*/vitest.config.ts",
+    "tooling/**/*.ts",
+    "vitest.config.ts"
+  ]
+}

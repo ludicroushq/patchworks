@@ -1,0 +1,4 @@
+interface:
+  display_name: "Patchworks Update"
+  short_description: "Safely sync a repo with its Patchworks parent"
+  default_prompt: "Use $patchworks-update to safely apply and validate every pending parent-template update in this repository."

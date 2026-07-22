@@ -1,83 +1,48 @@
 {
-  "name": "patchworks",
-  "version": "0.1.3",
-  "description": "a tool to manage patches",
+  "name": "@patchworks/repo",
+  "private": true,
   "type": "module",
-  "bin": {
-    "patchworks": "./dist/index.js"
+  "packageManager": "bun@1.3.14",
+  "engines": {
+    "bun": ">=1.3.8"
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
+  "workspaces": [
+    "packages/*",
+    "docs"
   ],
-  "scripts": {
-    "build": "f -- tsup",
-    "ci:test": "f [ci:test:*]",
-    "ci:test:lint": "f -- eslint .",
-    "ci:test:pretty": "f -- prettier --check .",
-    "ci:test:typecheck": "f -- tsc --noEmit",
-    "ci:test:unit": "f -- vitest run",
-    "dev": "f -- tsup --watch",
-    "prepare": "f -- husky",
-    "release": "f [build] -- changeset publish",
-    "test": "f [test:*]",
-    "test:lint": "f -- eslint --fix .",
-    "test:pretty": "f -- prettier --write .",
-    "test:typecheck": "f -- tsc --noEmit",
-    "test:unit": "f -- vitest run",
-    "version": "f -- changeset version && pnpm install"
+  "overrides": {
+    "postcss": "8.5.21",
+    "sharp": "0.35.3"
   },
-  "dependencies": {
-    "@drizzle-team/brocli": "^0.11.0",
-    "chalk": "^5.4.1",
-    "inquirer": "^12.5.2",
-    "simple-git": "^3.27.0",
-    "tmp": "^0.2.3",
-    "zx": "^8.5.3"
+  "scripts": {
+    "build": "turbo run build",
+    "changeset": "changeset",
+    "check": "bun run lint && bun run typecheck && bun run build && bun run test:coverage && bun tooling/package-artifacts.ts",
+    "clean": "turbo run clean && rm -rf node_modules packages/*/node_modules docs/node_modules .turbo coverage",
+    "dev": "turbo run dev --filter=patchworks --filter=@patchworks/docs",
+    "dev:docs": "turbo run dev --filter=@patchworks/docs...",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint . --fix",
+    "preview:publish": "pkg-pr-new publish --comment=update --packageManager=bun './packages/patchworks'",
+    "release": "bun run build && bun tooling/package-artifacts.ts && changeset publish",
+    "test": "turbo run test",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "turbo run typecheck && tsc --project tsconfig.test.json --noEmit",
+    "version": "changeset version && bun install"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.2",
-    "@types/inquirer": "^9.0.7",
-    "@types/node": "^22.14.1",
-    "@types/tmp": "^0.2.6",
-    "concurrently": "^9.1.2",
-    "eslint": "^9.25.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "frunk": "^0.0.4",
-    "husky": "^9.1.7",
-    "lint-staged": "^15.5.1",
-    "neostandard": "^0.12.1",
-    "prettier": "^3.5.3",
-    "tsup": "^8.4.0",
-    "typescript": "5.8.2",
-    "vitest": "^2.1.9"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "packageManager": "pnpm@10.16.1",
-  "engines": {
-    "node": ">=18"
-  },
-  "lint-staged": {
-    "*": [
-      "eslint --fix",
-      "prettier --ignore-unknown --write"
-    ]
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ludicroushq/patchworks.git"
-  },
-  "keywords": [
-    "patchworks"
-  ],
-  "author": "ludicrous LLC",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/ludicroushq/patchworks/issues"
-  },
-  "homepage": "https://github.com/ludicroushq/patchworks#readme"
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/cli": "^2.31.1",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^24.13.3",
+    "@vitest/coverage-v8": "4.1.10",
+    "oxlint": "^1.75.0",
+    "pkg-pr-new": "^0.0.75",
+    "publint": "^0.3.21",
+    "tsdown": "^0.21.10",
+    "turbo": "^2.10.5",
+    "typescript": "^6.0.3",
+    "vitest": "4.1.10"
+  }
 }
