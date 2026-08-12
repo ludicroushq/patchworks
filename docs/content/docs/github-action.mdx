@@ -81,6 +81,36 @@ template commit.
 Rewritten template history is not rebased automatically. Run the CLI locally,
 review the new history, and use `patchworks update --rebase` explicitly.
 
+## Commit attribution
+
+Patchworks follows [GitHub's author and committer distinction](https://docs.github.com/en/authentication/troubleshooting-commit-signature-verification/using-a-verified-email-address-in-your-gpg-key)
+and treats each generated update commit like a cherry-pick: the original template
+commit author remains the author, while the automation that materializes the
+change is the committer. This keeps the source author attached to their work
+without claiming that the person associated with a nightly schedule wrote it.
+
+On github.com runs that use the repository `GITHUB_TOKEN`, the default committer
+is [GitHub's documented `github-actions[bot]` identity](https://github.com/actions/checkout#push-a-commit-using-the-built-in-token).
+Runs that use a custom token or another GitHub host default to the deliberately unlinked
+`Patchworks automation <automation@patchworks.invalid>` identity because the
+action cannot infer whether that credential belongs to a person or GitHub App.
+Set `committer` explicitly to an account- or instance-linked automation identity
+when you control that credential. The token still determines who pushes the
+branch and opens the pull request; it does not determine the Git author or
+committer headers.
+
+The `author` input is a caller-attested override. Use it only when that identity
+actually authored or adapted the downstream change. By default, Patchworks uses
+the raw name and email from the template commit and rejects unsafe identity
+metadata before changing the child working tree.
+
+This also gives Vercel a GitHub-linked commit author when the template author is
+connected to Vercel and has access to the child project. Vercel still applies its
+normal author membership, Hobby/Pro, fork, and verified-commit policies, so
+attribution alone cannot guarantee a preview for every repository. See
+[Vercel's Git deployment rules](https://vercel.com/docs/git) and
+[GitHub's commit-email attribution documentation](https://docs.github.com/en/account-and-profile/how-tos/email-preferences/setting-your-commit-email-address).
+
 ## Version selection
 
 The generated workflow pins the exact action release matching the Patchworks
@@ -147,8 +177,8 @@ other hosts use their own ambient Git credentials and never receive the token.
 | `patchworks-package` | Package version matching the action revision | Exact npm package spec used for canary testing |
 | `branch` | `patchworks/update` | Pull-request branch |
 | `base` | Repository default branch | Pull-request base branch |
-| `author` | Triggering actor's no-reply identity | Commit author in `Name <email>` form |
-| `committer` | Triggering actor's no-reply identity | Commit committer in `Name <email>` form |
+| `author` | Template commit author | Caller-attested commit author override in `Name <email>` form |
+| `committer` | `github-actions[bot]` for github.com `GITHUB_TOKEN` runs; neutral Patchworks automation otherwise | Commit committer override in `Name <email>` form |
 
 ## Outputs
 

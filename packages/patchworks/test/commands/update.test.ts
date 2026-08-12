@@ -11,6 +11,7 @@ const updateResult = {
   changedFiles: [],
   stagedFiles: [],
   commitMessage: "",
+  templateAuthor: null,
   prTitle: "",
   prBody: "",
   rejectFiles: [],

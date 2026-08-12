@@ -127,9 +127,11 @@ ancestors are symbolic links.
 
 `--report <path>` writes the update result as JSON after a successful run. The
 stable engine status is one of `up-to-date`, `updated`, or `conflicts`. The
-report also includes the old and new template commits, changed and reject paths,
-staged Gitlink paths, workflow-change detection, commit and pull-request text,
-rebase state, and warnings.
+report also includes the old and new template commits, the raw author identity
+from the prepared template commit, changed and reject paths, staged Gitlink
+paths, workflow-change detection, commit and pull-request text, rebase state,
+and warnings. The GitHub Action preserves that author when it materializes the
+downstream update commit.
 
 ### Rewritten history
 

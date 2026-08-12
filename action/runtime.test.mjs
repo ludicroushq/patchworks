@@ -1,7 +1,9 @@
+import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,6 +19,7 @@ import {
   parseWorkflowFiles,
   preflight,
   readChangedPaths,
+  resolveGeneratedCommitIdentity,
   resolvePackageSpec,
   runUpdate,
   writeCommandFile,
@@ -35,6 +38,23 @@ function response(status, body) {
 function outputFile() {
   const directory = mkdtempSync(join(tmpdir(), "patchworks-action-test-"));
   return join(directory, "output.txt");
+}
+
+function fixtureGit(directory, ...args) {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  const result = spawnSync("git", args, {
+    cwd: directory,
+    encoding: "utf8",
+    env,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  }
+  return result.stdout.trimEnd();
 }
 
 function writeConfig(directory, repository) {
@@ -783,11 +803,125 @@ describe("action metadata", () => {
     const tokenClassification =
       "${{ (inputs.token || env.GITHUB_TOKEN || github.token) != github.token }}";
 
-    expect(action.split(tokenClassification)).toHaveLength(3);
+    expect(action.split(tokenClassification)).toHaveLength(4);
     expect(action).toContain(
       "PATCHWORKS_SERVER_URL: ${{ github.server_url }}",
     );
+    expect(action).toContain(
+      "PATCHWORKS_TEMPLATE_AUTHOR: ${{ steps.patchworks.outputs.template_author }}",
+    );
+    expect(action).toContain("author: ${{ steps.identity.outputs.author }}");
+    expect(action).toContain(
+      "committer: ${{ steps.identity.outputs.committer }}",
+    );
+    expect(action).not.toContain("github.actor_id");
     expect(action).not.toContain("inputs.token != '' ||");
+  });
+});
+
+describe("generated commit identity", () => {
+  const templateAuthor = "Template Author <author@example.com>";
+  const actionsBot =
+    "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>";
+  const neutralAutomation =
+    "Patchworks automation <automation@patchworks.invalid>";
+
+  it("preserves the template author and uses GitHub's bot for GITHUB_TOKEN", () => {
+    expect(
+      resolveGeneratedCommitIdentity({
+        customToken: false,
+        serverUrl: "https://github.com",
+        templateAuthor,
+      }),
+    ).toEqual({ author: templateAuthor, committer: actionsBot });
+  });
+
+  it.each([
+    ["a custom token", true, "https://github.com"],
+    ["GitHub Enterprise", false, "https://github.example.com"],
+  ])("uses a neutral automation committer for %s", (_label, customToken, serverUrl) => {
+    expect(
+      resolveGeneratedCommitIdentity({
+        customToken,
+        serverUrl,
+        templateAuthor,
+      }),
+    ).toEqual({ author: templateAuthor, committer: neutralAutomation });
+  });
+
+  it("preserves caller-attested author and committer overrides", () => {
+    expect(
+      resolveGeneratedCommitIdentity({
+        authorOverride: "Downstream Author <downstream@example.com>",
+        committerOverride: "Template App <app@example.com>",
+        customToken: true,
+        serverUrl: "https://github.example.com",
+        templateAuthor,
+      }),
+    ).toEqual({
+      author: "Downstream Author <downstream@example.com>",
+      committer: "Template App <app@example.com>",
+    });
+  });
+
+  it("rejects missing or unsafe attribution instead of inventing a user", () => {
+    expect(() => resolveGeneratedCommitIdentity({})).toThrow(
+      "could not determine the template commit author",
+    );
+    expect(() =>
+      resolveGeneratedCommitIdentity({
+        templateAuthor: "Unsafe\nAuthor <author@example.com>",
+      }),
+    ).toThrow("template commit author name is not safe");
+    expect(() =>
+      resolveGeneratedCommitIdentity({
+        authorOverride: "not an identity",
+        templateAuthor,
+      }),
+    ).toThrow("author input must use the 'Name <email>' format");
+  });
+
+  it("writes the resolved author and committer into a disposable Git commit", () => {
+    const directory = mkdtempSync(join(tmpdir(), "patchworks-identity-fixture-"));
+    try {
+      const identity = resolveGeneratedCommitIdentity({
+        customToken: false,
+        serverUrl: "https://github.com/",
+        templateAuthor,
+      });
+      const author = /^([^<]+) <([^>]+)>$/.exec(identity.author);
+      const committer = /^([^<]+) <([^>]+)>$/.exec(identity.committer);
+      expect(author).not.toBeNull();
+      expect(committer).not.toBeNull();
+      if (!author || !committer) throw new Error("Resolved identity did not parse");
+
+      fixtureGit(directory, "init", "--initial-branch=main");
+      fixtureGit(
+        directory,
+        "-c",
+        `author.name=${author[1]}`,
+        "-c",
+        `author.email=${author[2]}`,
+        "-c",
+        `committer.name=${committer[1]}`,
+        "-c",
+        `committer.email=${committer[2]}`,
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "commit",
+        "--allow-empty",
+        "-m",
+        "Patchworks generated update",
+      );
+
+      expect(
+        fixtureGit(directory, "show", "-s", "--format=%an <%ae> / %cn <%ce>"),
+      ).toBe(`${templateAuthor} / ${actionsBot}`);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });
 
@@ -867,6 +1001,10 @@ describe("report collection", () => {
         prTitle: "Update template",
         rejectFiles: [".patchworks-rejects/bbbbbbb.patch"],
         status: "conflicts",
+        templateAuthor: {
+          email: "author@example.com",
+          name: "Template Author",
+        },
       }),
     );
     const spawn = vi.fn(() => ({
@@ -883,6 +1021,7 @@ describe("report collection", () => {
       reject_files_json:
         '[".patchworks-rejects/bbbbbbb.patch","conflict.txt.rej"]',
       status: "conflicts",
+      template_author: "Template Author <author@example.com>",
       workflow_changes: "true",
       workflow_files_json: '[".github/workflows/ci.yml"]',
     });
