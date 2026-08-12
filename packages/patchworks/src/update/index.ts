@@ -177,23 +177,73 @@ async function fetchRef(
   );
 }
 
-async function commitMessage(
+type CommitMetadata = {
+  subject: string;
+  body: string;
+  author: { name: string; email: string };
+};
+
+function hasUnsafeAuthorCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (
+      codePoint <= 0x1f ||
+      codePoint === 0x7f ||
+      character === "<" ||
+      character === ">"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function validateTemplateAuthor(
+  commit: string,
+  author: { name: string; email: string },
+): void {
+  const invalidFields = (["name", "email"] as const).filter((field) => {
+    const value = author[field];
+    return value.trim().length === 0 || hasUnsafeAuthorCharacter(value);
+  });
+  if (invalidFields.length === 0) {
+    return;
+  }
+
+  throw new Error(
+    `Template commit ${commit} has unsafe author ${invalidFields.join(" and ")}. Rewrite that template commit with a non-empty author name and email containing no ASCII control characters, "<", or ">", then retry.`,
+  );
+}
+
+async function commitMetadata(
   gitRunner: GitRunner,
   commit: string,
-): Promise<{ subject: string; body: string }> {
+): Promise<CommitMetadata> {
   const result = await gitRunner([
     "show",
     "--no-patch",
-    "--format=%s%x00%b",
+    "--format=%an%x00%ae%x00%s%x00%b",
     commit,
   ]);
-  const separator = result.stdout.indexOf("\0");
-  if (separator < 0) {
-    return { subject: result.stdout.trim(), body: "" };
+  const nameSeparator = result.stdout.indexOf("\0");
+  const emailSeparator = result.stdout.indexOf("\0", nameSeparator + 1);
+  const subjectSeparator = result.stdout.indexOf("\0", emailSeparator + 1);
+  if (nameSeparator < 0 || emailSeparator < 0 || subjectSeparator < 0) {
+    throw new Error(
+      `Unable to read author metadata for template commit ${commit}`,
+    );
   }
+
+  const author = {
+    name: result.stdout.slice(0, nameSeparator),
+    email: result.stdout.slice(nameSeparator + 1, emailSeparator),
+  };
+  validateTemplateAuthor(commit, author);
+
   return {
-    subject: result.stdout.slice(0, separator).trim(),
-    body: result.stdout.slice(separator + 1).trim(),
+    author,
+    subject: result.stdout.slice(emailSeparator + 1, subjectSeparator).trim(),
+    body: result.stdout.slice(subjectSeparator + 1).trim(),
   };
 }
 
@@ -217,6 +267,7 @@ function emptyResult(commit: string): PatchworksResult {
     changedFiles: [],
     stagedFiles: [],
     commitMessage: "",
+    templateAuthor: null,
     prTitle: "",
     prBody: "",
     rejectFiles: [],
@@ -237,6 +288,7 @@ export type PatchworksResult = {
   changedFiles: string[];
   stagedFiles: string[];
   commitMessage: string;
+  templateAuthor: { name: string; email: string } | null;
   prTitle: string;
   prBody: string;
   rejectFiles: string[];
@@ -408,7 +460,7 @@ export async function runPatchworksUpdate(
       `${rebased ? "Rebasing template history" : "Next template commit"}: ${currentCommit.slice(0, 12)} -> ${nextCommit.slice(0, 12)}`,
     );
 
-    const metadata = await commitMessage(gitRunner, nextCommit);
+    const metadata = await commitMetadata(gitRunner, nextCommit);
     const pathspec = ["--", ".", ":(exclude).patchworks.json"];
     const [diff, patchPathResult, rawDiff] = await Promise.all([
       gitRunner(
@@ -540,6 +592,7 @@ export async function runPatchworksUpdate(
       changedFiles,
       stagedFiles,
       commitMessage: commitSummary,
+      templateAuthor: metadata.author,
       prTitle,
       prBody,
       rejectFiles,

@@ -156,6 +156,7 @@ describe("update preconditions", () => {
       rejectFiles: [],
       currentCommit: repositories.firstCommit,
       nextCommit: repositories.firstCommit,
+      templateAuthor: null,
       warnings: [],
     });
   });

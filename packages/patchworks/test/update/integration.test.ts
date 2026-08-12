@@ -66,6 +66,126 @@ describe("Patchworks update integration", () => {
     ).toBe("");
   });
 
+  it("reports the raw template author for the downstream commit", async () => {
+    const repositories = await fixture();
+    const templateAuthor = {
+      name: "Distinct Template Author",
+      email: "template-author@patchworks.invalid",
+    };
+    await git(repositories.template, "config", "user.name", templateAuthor.name);
+    await git(
+      repositories.template,
+      "config",
+      "user.email",
+      templateAuthor.email,
+    );
+    await writeFile(
+      path.join(repositories.project, ".mailmap"),
+      `Mailmap Author <mailmap@patchworks.invalid> ${templateAuthor.name} <${templateAuthor.email}>\n`,
+    );
+    await commitAll(repositories.project, "Add author mailmap fixture");
+    await writeFile(
+      path.join(repositories.template, "hello.txt"),
+      "version two\n",
+      "utf8",
+    );
+    const nextCommit = await commitAll(
+      repositories.template,
+      "template: authored update",
+    );
+
+    const result = await runPatchworksUpdate({ workspace: repositories.project });
+
+    expect(result.nextCommit).toBe(nextCommit);
+    expect(result.templateAuthor).toEqual(templateAuthor);
+    const reportedAuthor = result.templateAuthor;
+    if (!reportedAuthor) {
+      throw new Error("Expected the update to report its template author");
+    }
+
+    await git(repositories.project, "add", "-A");
+    await git(
+      repositories.project,
+      "-c",
+      "user.name=Patchworks automation",
+      "-c",
+      "user.email=automation@patchworks.invalid",
+      "commit",
+      "--author",
+      `${reportedAuthor.name} <${reportedAuthor.email}>`,
+      "-m",
+      result.commitMessage,
+    );
+
+    expect(
+      await git(
+        repositories.project,
+        "show",
+        "--no-patch",
+        "--format=%an%x00%ae%x00%cn%x00%ce",
+        "HEAD",
+      ),
+    ).toBe(
+      [
+        templateAuthor.name,
+        templateAuthor.email,
+        "Patchworks automation",
+        "automation@patchworks.invalid",
+      ].join("\0"),
+    );
+  });
+
+  it("rejects unsafe template authors before mutating the project", async () => {
+    const repositories = await fixture();
+    const tree = await git(
+      repositories.template,
+      "rev-parse",
+      `${repositories.firstCommit}^{tree}`,
+    );
+    const rawCommitFile = path.join(repositories.root, "unsafe-commit.txt");
+    await writeFile(
+      rawCommitFile,
+      [
+        `tree ${tree}`,
+        `parent ${repositories.firstCommit}`,
+        "author Unsafe\tTemplate <unsafe@patchworks.invalid> 0 +0000",
+        "committer Patchworks Test <test@patchworks.invalid> 0 +0000",
+        "",
+        "unsafe author",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const unsafeCommit = await git(
+      repositories.template,
+      "hash-object",
+      "-t",
+      "commit",
+      "-w",
+      rawCommitFile,
+    );
+    await git(
+      repositories.template,
+      "update-ref",
+      "refs/heads/main",
+      unsafeCommit,
+    );
+
+    await expect(
+      runPatchworksUpdate({ workspace: repositories.project }),
+    ).rejects.toThrow(
+      `Template commit ${unsafeCommit} has unsafe author name`,
+    );
+    const config = JSON.parse(
+      await readFile(
+        path.join(repositories.project, ".patchworks.json"),
+        "utf8",
+      ),
+    ) as { commit: string };
+    expect(config.commit).toBe(repositories.firstCommit);
+    expect(await git(repositories.project, "status", "--porcelain")).toBe("");
+  });
+
   it("walks merge-heavy templates on the deterministic first-parent path", async () => {
     const repositories = await fixture();
     await git(repositories.template, "checkout", "-b", "feature");

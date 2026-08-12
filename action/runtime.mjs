@@ -12,6 +12,10 @@ import { spawnSync } from "node:child_process";
 const WORKFLOW_PREFIX = ".github/workflows/";
 const NPM_REGISTRY = "https://registry.npmjs.org/";
 const MAX_CONFIG_BYTES = 1024 * 1024;
+const GITHUB_ACTIONS_BOT_IDENTITY =
+  "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>";
+const PATCHWORKS_AUTOMATION_IDENTITY =
+  "Patchworks automation <automation@patchworks.invalid>";
 
 function cleanApiErrorBody(body) {
   try {
@@ -120,6 +124,84 @@ function safeJsonArray(value) {
 
 function reportValue(report, camelCase, snakeCase) {
   return report[camelCase] ?? report[snakeCase];
+}
+
+function hasControlCharacters(value) {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || codePoint === 127;
+  });
+}
+
+function validateIdentityPart(value, label) {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  if (
+    !normalized ||
+    hasControlCharacters(normalized) ||
+    normalized.includes("<") ||
+    normalized.includes(">")
+  ) {
+    throw new Error(`${label} is not safe for Git commit attribution`);
+  }
+  return normalized;
+}
+
+export function formatGitIdentity(identity, label = "Git identity") {
+  if (!identity || typeof identity !== "object" || Array.isArray(identity)) {
+    throw new Error(`${label} must contain a name and email`);
+  }
+  const name = validateIdentityPart(identity.name, `${label} name`);
+  const email = validateIdentityPart(identity.email, `${label} email`);
+  return `${name} <${email}>`;
+}
+
+export function parseGitIdentity(value, label = "Git identity") {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  const match = /^([^<>]+)<([^<>]+)>$/.exec(normalized);
+  if (!match) {
+    throw new Error(`${label} must use the 'Name <email>' format`);
+  }
+  return {
+    name: validateIdentityPart(match[1], `${label} name`),
+    email: validateIdentityPart(match[2], `${label} email`),
+  };
+}
+
+export function resolveGeneratedCommitIdentity({
+  authorOverride = "",
+  committerOverride = "",
+  customToken = false,
+  serverUrl = "https://github.com",
+  templateAuthor = "",
+}) {
+  const author = authorOverride.trim() || templateAuthor.trim();
+  if (!author) {
+    throw new Error(
+      "Patchworks could not determine the template commit author. Pass the author input explicitly as 'Name <email>'.",
+    );
+  }
+  const parsedAuthor = parseGitIdentity(
+    author,
+    authorOverride.trim() ? "author input" : "template commit author",
+  );
+
+  let committer = committerOverride.trim();
+  if (!committer) {
+    const githubDotCom = serverUrl.replace(/\/+$/, "") === "https://github.com";
+    committer =
+      githubDotCom && !customToken
+        ? GITHUB_ACTIONS_BOT_IDENTITY
+        : PATCHWORKS_AUTOMATION_IDENTITY;
+  }
+  const parsedCommitter = parseGitIdentity(
+    committer,
+    committerOverride.trim() ? "committer input" : "generated committer",
+  );
+
+  return {
+    author: formatGitIdentity(parsedAuthor, "resolved author"),
+    committer: formatGitIdentity(parsedCommitter, "resolved committer"),
+  };
 }
 
 function isRejectArtifact(file) {
@@ -627,6 +709,15 @@ export function collectReport({ reportPath, workspace, spawn = spawnSync }) {
 
   const commitMessage = reportValue(report, "commitMessage", "commit_message");
   const prTitle = reportValue(report, "prTitle", "pr_title");
+  const reportedTemplateAuthor = reportValue(
+    report,
+    "templateAuthor",
+    "template_author",
+  );
+  const templateAuthor =
+    reportedTemplateAuthor === null || reportedTemplateAuthor === undefined
+      ? ""
+      : formatGitIdentity(reportedTemplateAuthor, "template commit author");
   if (hasChanges && (typeof commitMessage !== "string" || !commitMessage.trim())) {
     throw new Error("Patchworks report is missing commitMessage");
   }
@@ -668,6 +759,7 @@ export function collectReport({ reportPath, workspace, spawn = spawnSync }) {
       reject_files: rejectFiles.join("\n"),
       reject_files_json: JSON.stringify(rejectFiles),
       status,
+      template_author: templateAuthor,
       workflow_changes: workflowFiles.length > 0 ? "true" : "false",
       workflow_files: workflowFiles.join("\n"),
       workflow_files_json: JSON.stringify(workflowFiles),

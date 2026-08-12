@@ -6,6 +6,7 @@ import {
   guardWorkflowChanges,
   parseWorkflowFiles,
   preflight,
+  resolveGeneratedCommitIdentity,
   runUpdate,
   writeCommandFile,
   writeError,
@@ -59,6 +60,18 @@ async function main() {
           "Patchworks produced reject artifacts. Resolve and remove every legacy .rej file and the current .patchworks-rejects/<commit>/ artifact tree before merging the pull request.",
         );
       }
+      return;
+    }
+
+    case "identity": {
+      const result = resolveGeneratedCommitIdentity({
+        authorOverride: process.env.PATCHWORKS_AUTHOR || "",
+        committerOverride: process.env.PATCHWORKS_COMMITTER || "",
+        customToken: process.env.PATCHWORKS_CUSTOM_TOKEN === "true",
+        serverUrl: process.env.PATCHWORKS_SERVER_URL || "https://github.com",
+        templateAuthor: process.env.PATCHWORKS_TEMPLATE_AUTHOR || "",
+      });
+      writeCommandFile(process.env.GITHUB_OUTPUT, result);
       return;
     }
 
