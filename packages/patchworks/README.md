@@ -66,3 +66,12 @@ available, `patchworks update --rebase` explicitly applies the aggregate diff.
 
 The GitHub Action and complete configuration reference are documented at
 [patchworks.dev](https://patchworks.dev).
+
+## Done-for-you setup
+
+One $750 founding setup is available for a GitHub team that wants to validate
+Patchworks on a real template before adopting it more broadly. The fixed scope
+covers one template, one new project, and two consecutive update pull requests
+without Git history repair.
+
+[Review the acceptance result and request a read-only fit check](https://patchworks.dev/docs/setup-service).

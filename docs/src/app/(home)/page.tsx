@@ -6,8 +6,8 @@ export default function HomePage() {
       <div className="max-w-3xl text-center">
         <h1 className="mb-4 text-4xl font-extrabold md:text-5xl">Patchworks</h1>
         <p className="mb-6 text-xl text-fd-muted-foreground">
-          Automatically sync your repository with updates from its template
-          source.
+          Keep projects connected to their source templates, one reviewable
+          commit at a time.
         </p>
 
         <div className="flex flex-wrap justify-center gap-4 mb-12">
@@ -17,14 +17,12 @@ export default function HomePage() {
           >
             Documentation
           </Link>
-          <a
-            href="https://github.com/ludicroushq/patchworks"
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            href="/docs/setup-service"
             className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-6 py-2 text-sm font-medium shadow-sm hover:bg-accent hover:text-accent-foreground"
           >
-            GitHub
-          </a>
+            Done-for-you setup
+          </Link>
         </div>
 
         <div className="grid gap-8 md:grid-cols-2">
